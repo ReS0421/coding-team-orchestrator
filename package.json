@@ -1,0 +1,17 @@
+{
+  "name": "team-orchestrator",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.4.0",
+    "vitest": "^1.4.0",
+    "@types/node": "^22.0.0"
+  }
+}
