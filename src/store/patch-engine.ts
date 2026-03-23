@@ -107,7 +107,7 @@ function applySinglePatch(
       const arr = Array.isArray(currentValue)
         ? [...currentValue]
         : [];
-      arr.push(patch.new_value);
+      arr.push(patch.new_value as string);
       (updatedArtifact as Record<string, unknown>)[patch.field] = arr;
       break;
     }

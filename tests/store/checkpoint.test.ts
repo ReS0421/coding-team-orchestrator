@@ -65,7 +65,7 @@ describe("restoreFromCheckpoint", () => {
       ...withCp,
       manifest_seq: 5,
       artifacts: withCp.artifacts.map((a) =>
-        a.id === "spec" ? { ...a, content_rev: 10, freshness: Freshness.STALE_HARD as const } : a,
+        a.id === "spec" ? { ...a, content_rev: 10, freshness: Freshness.STALE_HARD } : a,
       ),
     };
     const restored = restoreFromCheckpoint(
