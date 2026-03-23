@@ -15,7 +15,7 @@ export const EscalationLogEntrySchema = z.object({
 }).passthrough();
 
 export const LeadReturnSchema = z.object({
-  final_merge_candidate: z.string().min(1),
+  final_merge_candidate: z.boolean(),
   execution_summary: z.string().min(1),
   specialist_results: z.array(SpecialistSubmissionSchema),
   manifest_updates: ManifestPatchSetSchema,

@@ -1,3 +1,4 @@
+// ─── Tier ───────────────────────────────────────────────
 export const Tier = {
   ONE: 1,
   TWO: 2,
@@ -5,92 +6,103 @@ export const Tier = {
 } as const;
 export type Tier = (typeof Tier)[keyof typeof Tier];
 
+// ─── ArtifactFamily (설계 §3 Family) ────────────────────
 export const ArtifactFamily = {
-  CODE: "code",
-  DOC: "doc",
-  CONFIG: "config",
+  REFERENCE: "reference",
+  CONTROL: "control",
+  SUBMISSION: "submission",
 } as const;
 export type ArtifactFamily = (typeof ArtifactFamily)[keyof typeof ArtifactFamily];
 
+// ─── Lifecycle (설계 §Lifecycle 도식) ────────────────────
 export const Lifecycle = {
   DRAFT: "draft",
-  ACTIVE: "active",
-  REVIEW: "review",
+  PROPOSED: "proposed",
   APPROVED: "approved",
-  MERGED: "merged",
+  REJECTED: "rejected",
+  SUPERSEDED: "superseded",
   ARCHIVED: "archived",
 } as const;
 export type Lifecycle = (typeof Lifecycle)[keyof typeof Lifecycle];
 
+// ─── Freshness (설계 §Freshness 2단계) ──────────────────
 export const Freshness = {
   FRESH: "fresh",
-  STALE: "stale",
-  EXPIRED: "expired",
+  STALE_SOFT: "stale_soft",
+  STALE_HARD: "stale_hard",
 } as const;
 export type Freshness = (typeof Freshness)[keyof typeof Freshness];
 
+// ─── ControlState (설계 §차원 분리) ─────────────────────
 export const ControlState = {
-  IDLE: "idle",
-  RUNNING: "running",
-  HALTED: "halted",
+  ACTIVE: "active",
+  SUSPENDED: "suspended",
+  COMPLETED: "completed",
 } as const;
 export type ControlState = (typeof ControlState)[keyof typeof ControlState];
 
+// ─── SubmissionState (설계 §차원 분리) ──────────────────
 export const SubmissionState = {
+  SUBMITTED: "submitted",
+  ACCEPTED: "accepted",
+  REJECTED: "rejected",
+  REVISION_REQUESTED: "revision_requested",
+} as const;
+export type SubmissionState = (typeof SubmissionState)[keyof typeof SubmissionState];
+
+// ─── ErrorType (설계 §에러 유형) ────────────────────────
+export const ErrorType = {
+  TIMEOUT: "timeout",
+  CRASH: "crash",
+  STALLED: "stalled",
+  BLOCKED: "blocked",
+  NEEDS_CONTEXT: "needs_context",
+  MALFORMED_RETURN: "malformed_return",
+  SILENT_FAILURE: "silent_failure",
+} as const;
+export type ErrorType = (typeof ErrorType)[keyof typeof ErrorType];
+
+// ─── PropagationClass (설계 §Propagation Class) ─────────
+export const PropagationClass = {
+  CONTAINED: "contained",
+  DEPENDENT_HOLD: "dependent_hold",
+  GLOBAL_ESCALATION: "global_escalation",
+} as const;
+export type PropagationClass = (typeof PropagationClass)[keyof typeof PropagationClass];
+
+// ─── TimeoutClass (설계 §Timeout Profiles) ──────────────
+export const TimeoutClass = {
+  QUICK: "quick",
+  STANDARD: "standard",
+  EXTENDED: "extended",
+  UNLIMITED: "unlimited",
+} as const;
+export type TimeoutClass = (typeof TimeoutClass)[keyof typeof TimeoutClass];
+
+// ─── Role (설계 §Dispatch Card) ─────────────────────────
+export const Role = {
+  PLANNER: "planner",
+  SPECIALIST: "specialist",
+  EXECUTION_LEAD: "execution_lead",
+  SHARED_OWNER: "shared_owner",
+  REVIEWER: "reviewer",
+} as const;
+export type Role = (typeof Role)[keyof typeof Role];
+
+// ─── Status (설계 §4-status 프로토콜) ───────────────────
+export const Status = {
   DONE: "done",
   DONE_WITH_CONCERNS: "done_with_concerns",
   NEEDS_CONTEXT: "needs_context",
   BLOCKED: "blocked",
 } as const;
-export type SubmissionState = (typeof SubmissionState)[keyof typeof SubmissionState];
-
-export const ErrorType = {
-  PARSE_FAILURE: "parse_failure",
-  TIMEOUT: "timeout",
-  CONFLICT: "conflict",
-  MISSING_CONTEXT: "missing_context",
-  PERMISSION_DENIED: "permission_denied",
-  INTERNAL: "internal",
-  EXTERNAL: "external",
-} as const;
-export type ErrorType = (typeof ErrorType)[keyof typeof ErrorType];
-
-export const PropagationClass = {
-  LOCAL: "local",
-  SESSION: "session",
-  GLOBAL: "global",
-} as const;
-export type PropagationClass = (typeof PropagationClass)[keyof typeof PropagationClass];
-
-export const TimeoutClass = {
-  SHORT: "short",
-  MEDIUM: "medium",
-  LONG: "long",
-  INFINITE: "infinite",
-} as const;
-export type TimeoutClass = (typeof TimeoutClass)[keyof typeof TimeoutClass];
-
-export const Role = {
-  PLANNER: "planner",
-  SPECIALIST: "specialist",
-  REVIEWER: "reviewer",
-  LEAD: "lead",
-  OBSERVER: "observer",
-} as const;
-export type Role = (typeof Role)[keyof typeof Role];
-
-export const Status = {
-  PENDING: "pending",
-  IN_PROGRESS: "in_progress",
-  COMPLETED: "completed",
-  FAILED: "failed",
-} as const;
 export type Status = (typeof Status)[keyof typeof Status];
 
+// ─── ChangeClass (설계 §Change class) ───────────────────
 export const ChangeClass = {
-  CREATE: "create",
-  UPDATE: "update",
-  DELETE: "delete",
-  RENAME: "rename",
+  STRUCTURAL: "structural",
+  BEHAVIORAL: "behavioral",
+  SCOPE: "scope",
+  COSMETIC: "cosmetic",
 } as const;
 export type ChangeClass = (typeof ChangeClass)[keyof typeof ChangeClass];

@@ -1,80 +1,70 @@
 import { describe, it, expect } from "vitest";
-import {
-  DispatchCardSchema,
-  validateDispatchCard,
-  safeValidateDispatchCard,
-} from "../../src/schemas/dispatch-card.js";
+import { validateDispatchCard } from "../../src/schemas/dispatch-card.js";
 
 const validCard = {
   version: 1,
-  dispatch_rev: "rev-001",
+  dispatch_rev: 1,
   role: "specialist",
-  id: "card-001",
+  id: "specialist-1",
   tier: 2,
-  task: "Implement feature X",
-  input_refs: ["ref-a", "ref-b"],
-  entrypoint: "src/feature-x/index.ts",
-  must_read: ["docs/spec.md"],
-  authoritative_artifact: "artifact-001",
-  write_scope: ["src/feature-x/"],
-  completion_check: "npm test",
-  return_format: { schema: "specialist-submission" },
-  timeout_profile: { class: "medium", heartbeat_required: true },
+  task: "src/auth/ 모듈 구현",
+  input_refs: ["tasks.md@rev3"],
+  entrypoint: ["dispatch/specialist-1.md"],
+  must_read: ["tasks.md@rev3"],
+  authoritative_artifact: ["tasks.md@rev3"],
+  write_scope: ["src/auth/**"],
+  completion_check: ["spec §3 수락 기준 충족"],
+  return_format: { schema: "specialist_submission_v1" },
+  timeout_profile: { class: "standard", heartbeat_required: false },
 };
 
-describe("DispatchCardSchema", () => {
-  it("accepts a valid dispatch card", () => {
-    const result = DispatchCardSchema.safeParse(validCard);
-    expect(result.success).toBe(true);
+describe("DispatchCard - valid", () => {
+  it("parses a minimal valid card", () => {
+    const result = validateDispatchCard(validCard);
+    expect(result.role).toBe("specialist");
+    expect(result.tier).toBe(2);
+    expect(result.dispatch_rev).toBe(1);
   });
-
-  it("accepts card with optional fields", () => {
-    const card = {
+  it("allows optional fields", () => {
+    const withOptionals = {
       ...validCard,
-      forbidden_paths: ["/etc/secret"],
-      shared_surface: [{ path: "shared/state.json", rule: "append-only", owner: "lead" }],
+      forbidden_paths: ["src/db/**"],
+      shared_surface: [{ path: "src/types/auth.ts", rule: "tier_shared_protocol", owner: "specialist-1" }],
     };
-    const result = DispatchCardSchema.safeParse(card);
-    expect(result.success).toBe(true);
+    expect(() => validateDispatchCard(withOptionals)).not.toThrow();
   });
-
-  it("rejects wrong version", () => {
-    const result = DispatchCardSchema.safeParse({ ...validCard, version: 2 });
-    expect(result.success).toBe(false);
+  it("accepts all valid roles", () => {
+    for (const role of ["planner", "specialist", "execution_lead", "shared_owner", "reviewer"]) {
+      expect(() => validateDispatchCard({ ...validCard, role })).not.toThrow();
+    }
   });
-
-  it("rejects invalid role", () => {
-    const result = DispatchCardSchema.safeParse({ ...validCard, role: "admin" });
-    expect(result.success).toBe(false);
+  it("accepts all valid timeout classes", () => {
+    for (const cls of ["quick", "standard", "extended", "unlimited"]) {
+      expect(() => validateDispatchCard({
+        ...validCard,
+        timeout_profile: { class: cls, heartbeat_required: false },
+      })).not.toThrow();
+    }
   });
+});
 
-  it("rejects invalid tier", () => {
-    const result = DispatchCardSchema.safeParse({ ...validCard, tier: 4 });
-    expect(result.success).toBe(false);
-  });
-
+describe("DispatchCard - invalid", () => {
   it("rejects missing required fields", () => {
-    const { task, ...incomplete } = validCard;
-    const result = DispatchCardSchema.safeParse(incomplete);
-    expect(result.success).toBe(false);
+    expect(() => validateDispatchCard({ ...validCard, role: undefined })).toThrow();
   });
-
-  it("validateDispatchCard returns parsed data", () => {
-    const parsed = validateDispatchCard(validCard);
-    expect(parsed.id).toBe("card-001");
+  it("rejects invalid role value", () => {
+    expect(() => validateDispatchCard({ ...validCard, role: "boss" })).toThrow();
   });
-
-  it("validateDispatchCard throws on invalid data", () => {
-    expect(() => validateDispatchCard({ version: 1 })).toThrow();
+  it("rejects invalid tier", () => {
+    expect(() => validateDispatchCard({ ...validCard, tier: 4 })).toThrow();
   });
-
-  it("safeValidateDispatchCard returns success result", () => {
-    const result = safeValidateDispatchCard(validCard);
-    expect(result.success).toBe(true);
+  it("rejects version !== 1", () => {
+    expect(() => validateDispatchCard({ ...validCard, version: 2 })).toThrow();
   });
-
-  it("safeValidateDispatchCard returns error result without throwing", () => {
-    const result = safeValidateDispatchCard({});
-    expect(result.success).toBe(false);
+  it("rejects string dispatch_rev", () => {
+    expect(() => validateDispatchCard({ ...validCard, dispatch_rev: "v1" })).toThrow();
+  });
+  it("rejects string entrypoint (should be array)", () => {
+    expect(() => validateDispatchCard({ ...validCard, entrypoint: "single" })).toThrow();
   });
 });

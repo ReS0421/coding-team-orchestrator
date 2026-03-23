@@ -12,7 +12,7 @@ export const ReviewIssueSchema = z.object({
 
 export const ReviewerReturnSchema = z.object({
   review_report: z.string().min(1),
-  disposition: z.enum(["PASS", "FAIL", "CONDITIONAL"]),
+  disposition_recommendation: z.enum(["PASS", "FAIL", "CONDITIONAL"]),
   issues: z.array(ReviewIssueSchema),
 });
 

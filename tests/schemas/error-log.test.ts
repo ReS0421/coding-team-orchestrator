@@ -1,73 +1,58 @@
 import { describe, it, expect } from "vitest";
-import {
-  ErrorLogSchema,
-  validateErrorLog,
-  safeValidateErrorLog,
-} from "../../src/schemas/error-log.js";
+import { validateErrorLog } from "../../src/schemas/error-log.js";
 
-const validLog = {
+const validEntry = {
   session_id: "sess-001",
   role: "specialist",
   error_type: "timeout",
-  timestamp: "2026-03-23T12:00:00Z",
-  dispatch_rev: "rev-005",
+  timestamp: "2026-03-23T10:00:00.000Z",
+  dispatch_rev: 1,
   retry_count: 0,
-  propagation_class: "local",
-  affected_tasks: ["task-1"],
-  artifact_refs: ["artifact-001"],
+  propagation_class: "contained",
+  affected_tasks: [],
+  artifact_refs: ["dispatch/specialist-1.md@rev1"],
 };
 
-describe("ErrorLogSchema", () => {
-  it("accepts a valid error log", () => {
-    expect(ErrorLogSchema.safeParse(validLog).success).toBe(true);
+describe("ErrorLog - valid", () => {
+  it("parses a minimal valid entry", () => {
+    const result = validateErrorLog(validEntry);
+    expect(result.error_type).toBe("timeout");
+    expect(result.propagation_class).toBe("contained");
   });
-
-  it("accepts log with optional fields", () => {
-    const full = { ...validLog, resolution: "retry", notes: "Will retry after cooldown" };
-    expect(ErrorLogSchema.safeParse(full).success).toBe(true);
+  it("parses with resolution and notes", () => {
+    expect(() => validateErrorLog({ ...validEntry, resolution: "retry", notes: "first retry" })).not.toThrow();
   });
-
-  it("rejects invalid error_type", () => {
-    expect(ErrorLogSchema.safeParse({ ...validLog, error_type: "unknown" }).success).toBe(false);
+  it("parses global_escalation propagation", () => {
+    expect(() => validateErrorLog({ ...validEntry, propagation_class: "global_escalation" })).not.toThrow();
   });
+  it("parses all error types", () => {
+    const types = ["timeout", "crash", "stalled", "blocked", "needs_context", "malformed_return", "silent_failure"];
+    types.forEach((t) => expect(() => validateErrorLog({ ...validEntry, error_type: t })).not.toThrow());
+  });
+  it("parses all roles", () => {
+    const roles = ["planner", "specialist", "execution_lead", "shared_owner", "reviewer"];
+    roles.forEach((r) => expect(() => validateErrorLog({ ...validEntry, role: r })).not.toThrow());
+  });
+  it("parses all resolution types", () => {
+    const resolutions = ["retry", "reassign", "escalate", "abort", "salvage"];
+    resolutions.forEach((r) => expect(() => validateErrorLog({ ...validEntry, resolution: r })).not.toThrow());
+  });
+});
 
+describe("ErrorLog - invalid", () => {
   it("rejects invalid timestamp format", () => {
-    expect(ErrorLogSchema.safeParse({ ...validLog, timestamp: "not-a-date" }).success).toBe(false);
+    expect(() => validateErrorLog({ ...validEntry, timestamp: "not-a-date" })).toThrow();
   });
-
-  it("rejects negative retry_count", () => {
-    expect(ErrorLogSchema.safeParse({ ...validLog, retry_count: -1 }).success).toBe(false);
+  it("rejects unknown error_type", () => {
+    expect(() => validateErrorLog({ ...validEntry, error_type: "unknown_error" })).toThrow();
   });
-
   it("rejects invalid propagation_class", () => {
-    expect(
-      ErrorLogSchema.safeParse({ ...validLog, propagation_class: "unknown" }).success,
-    ).toBe(false);
+    expect(() => validateErrorLog({ ...validEntry, propagation_class: "local" })).toThrow();
   });
-
-  it("rejects invalid resolution", () => {
-    expect(
-      ErrorLogSchema.safeParse({ ...validLog, resolution: "ignore" }).success,
-    ).toBe(false);
+  it("rejects invalid role", () => {
+    expect(() => validateErrorLog({ ...validEntry, role: "manager" })).toThrow();
   });
-
-  it("accepts all 5 valid resolutions", () => {
-    for (const r of ["retry", "skip", "escalate", "abort", "manual"]) {
-      expect(ErrorLogSchema.safeParse({ ...validLog, resolution: r }).success).toBe(true);
-    }
-  });
-
-  it("validateErrorLog returns parsed data", () => {
-    const parsed = validateErrorLog(validLog);
-    expect(parsed.session_id).toBe("sess-001");
-  });
-
-  it("validateErrorLog throws on invalid", () => {
-    expect(() => validateErrorLog({})).toThrow();
-  });
-
-  it("safeValidateErrorLog does not throw", () => {
-    const result = safeValidateErrorLog({});
-    expect(result.success).toBe(false);
+  it("rejects string dispatch_rev", () => {
+    expect(() => validateErrorLog({ ...validEntry, dispatch_rev: "v1" })).toThrow();
   });
 });
