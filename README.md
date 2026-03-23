@@ -38,6 +38,23 @@ tests/
     lead-return.test.ts
 ```
 
+## Step 3: Fake Runner + Test Harness
+
+```
+tests/
+  helpers/
+    fake-runner.ts       # RunnerFn type + role-based default returns
+    fake-runner.test.ts
+    crash-runner.ts      # CrashMode: timeout, crash, malformed_return, silent_failure
+    crash-runner.test.ts
+    harness.ts           # Scenario/ScenarioResult types, runScenario, assertResult, makeDispatchCard
+    harness.test.ts
+  scenarios/
+    tier1-happy.test.ts         # All roles succeed, schema validation
+    tier1-planner-skip.test.ts  # Planner skip flow, specialist-only execution
+    tier1-retry.test.ts         # Crash→log→retry flow with NDJSON error logging
+```
+
 ## Tech Stack
 
 - TypeScript (strict mode)
