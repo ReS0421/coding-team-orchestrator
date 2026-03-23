@@ -60,7 +60,7 @@ export function restoreFromCheckpoint(
         from_content_rev: 0,
         to_content_rev: 0,
         manifest_seq_at: newSeq,
-        change_class: "structural" as const,
+        change_class: "scope" as const,
         reason: `Rollback to ${checkpointId}: ${reason}`,
         timestamp: ts,
       },
