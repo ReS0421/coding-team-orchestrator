@@ -4,7 +4,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { runTier1 } from "../../src/engine/orchestrator.js";
 import { createSpawnAdapter } from "../../src/runners/spawn-adapter.js";
-import { fakeRunner, type RunnerFn } from "../helpers/fake-runner.js";
+import type { RunnerFn } from "../../src/runners/types.js";
+import { fakeRunner } from "../helpers/fake-runner.js";
 import { createCrashRunner } from "../helpers/crash-runner.js";
 import { readNdjson } from "../../src/store/log-writer.js";
 import type { TaskRequest } from "../../src/engine/dispatch-rule.js";
@@ -57,13 +58,13 @@ describe("Tier 1 E2E Integration", () => {
     const crashRunner = createCrashRunner({ mode: "crash", errorMessage: "network timeout" });
 
     let specialistCallCount = 0;
-    const crashThenRecover: RunnerFn = async (card, opts) => {
-      if (card.role === "planner") return fakeRunner(card, opts);
+    const crashThenRecover: RunnerFn = async (card) => {
+      if (card.role === "planner") return fakeRunner(card);
       specialistCallCount++;
       if (specialistCallCount === 1) {
-        return crashRunner(card, opts);
+        return crashRunner(card);
       }
-      return fakeRunner(card, opts);
+      return fakeRunner(card);
     };
 
     const runner = createSpawnAdapter({ mode: "fake", fakeRunner: crashThenRecover });
@@ -118,9 +119,9 @@ describe("Tier 1 E2E Integration", () => {
 
   it("max retries exceeded end-to-end", async () => {
     const crashRunner = createCrashRunner({ mode: "crash", errorMessage: "persistent failure" });
-    const alwaysCrash: RunnerFn = async (card, opts) => {
-      if (card.role === "planner") return fakeRunner(card, opts);
-      return crashRunner(card, opts);
+    const alwaysCrash: RunnerFn = async (card) => {
+      if (card.role === "planner") return fakeRunner(card);
+      return crashRunner(card);
     };
 
     const runner = createSpawnAdapter({ mode: "fake", fakeRunner: alwaysCrash });

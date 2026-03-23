@@ -26,5 +26,8 @@ export function judgeTier(input: TierJudgeInput): Tier {
     return Tier.ONE;
   }
 
+  // TODO: Tier 3 판정 (Sprint 5)
+  // 설계 §Tier 판정: shared surface 다수 or 아키텍처 판단 필요 or specialist 4+ → Tier 3
+  // 현재는 Tier 2로 fallback
   return Tier.TWO;
 }

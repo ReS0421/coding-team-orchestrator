@@ -1,4 +1,4 @@
-import type { RunnerFn } from "../../tests/helpers/fake-runner.js";
+import type { RunnerFn } from "./types.js";
 
 export interface SpawnAdapterConfig {
   mode: "fake" | "real";

@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { RunnerFn } from "../../tests/helpers/fake-runner.js";
+import type { RunnerFn } from "../runners/types.js";
 import type { DispatchCard } from "../schemas/dispatch-card.js";
 import type { SpecialistSubmission } from "../schemas/specialist-submission.js";
 import { safeValidateSpecialistSubmission } from "../schemas/specialist-submission.js";
-import type { PlannerReturn } from "../schemas/planner-return.js";
+import { safeValidatePlannerReturn, type PlannerReturn } from "../schemas/planner-return.js";
 import type { Tier } from "../domain/types.js";
 import type { ErrorLog } from "../schemas/error-log.js";
 import {
@@ -42,7 +42,7 @@ export async function runTier1(
   config: OrchestratorConfig,
   request: TaskRequest,
 ): Promise<OrchestratorResult> {
-  const maxRetries = config.maxRetries ?? 2;
+  const maxRetries = config.maxRetries ?? 1; // 설계 §Retry Budget: per_session = 1
   const sessionId = `session-${Date.now()}`;
 
   // ── INTAKE ──
@@ -83,7 +83,21 @@ export async function runTier1(
   if (needs_planner && planner_card) {
     try {
       const raw = await config.runner(planner_card);
-      plannerResult = raw as PlannerReturn;
+      const validation = safeValidatePlannerReturn(raw);
+      if (!validation.success) {
+        appendErrorLog(
+          makeErrorLog(sessionId, "planner", "malformed_return", 1, 0, [request.task]),
+          { logDir: config.logDir },
+        );
+        return {
+          success: false,
+          tier,
+          dispatch_card,
+          retry_count: 0,
+          error: "Planner returned malformed data",
+        };
+      }
+      plannerResult = validation.data;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       appendErrorLog(

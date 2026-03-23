@@ -1,5 +1,6 @@
 import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
-import type { RunnerFn, RunnerReturn, RunnerOptions } from "./fake-runner.js";
+import type { RunnerReturn } from "../../src/runners/types.js";
+import type { TestRunnerFn } from "./runner-options.js";
 
 export type CrashMode = "timeout" | "crash" | "malformed_return" | "silent_failure";
 
@@ -9,10 +10,9 @@ export interface CrashRunnerOptions {
   errorMessage?: string;
 }
 
-export function createCrashRunner(crashOpts: CrashRunnerOptions): RunnerFn {
+export function createCrashRunner(crashOpts: CrashRunnerOptions): TestRunnerFn {
   return async (
     _card: DispatchCard,
-    _opts?: RunnerOptions,
   ): Promise<RunnerReturn> => {
     switch (crashOpts.mode) {
       case "timeout": {

@@ -4,7 +4,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { runTier1, type OrchestratorConfig } from "../../src/engine/orchestrator.js";
 import type { TaskRequest } from "../../src/engine/dispatch-rule.js";
-import { fakeRunner, type RunnerFn } from "../helpers/fake-runner.js";
+import type { RunnerFn } from "../../src/runners/types.js";
+import { fakeRunner } from "../helpers/fake-runner.js";
 import { createCrashRunner } from "../helpers/crash-runner.js";
 import { readNdjson } from "../../src/store/log-writer.js";
 import {
@@ -58,9 +59,9 @@ describe("runTier1", () => {
     saveManifest(projectRoot, manifest);
 
     let plannerCalled = false;
-    const trackingRunner: RunnerFn = async (card, opts) => {
+    const trackingRunner: RunnerFn = async (card) => {
       if (card.role === "planner") plannerCalled = true;
-      return fakeRunner(card, opts);
+      return fakeRunner(card);
     };
 
     const result = await runTier1(makeConfig(trackingRunner), makeRequest());
@@ -71,9 +72,9 @@ describe("runTier1", () => {
 
   it("planner required: no tasks_md → planner runs first", async () => {
     let plannerCalled = false;
-    const trackingRunner: RunnerFn = async (card, opts) => {
+    const trackingRunner: RunnerFn = async (card) => {
       if (card.role === "planner") plannerCalled = true;
-      return fakeRunner(card, opts);
+      return fakeRunner(card);
     };
 
     const result = await runTier1(makeConfig(trackingRunner), makeRequest());
@@ -85,14 +86,14 @@ describe("runTier1", () => {
 
   it("retry: crash then success, retry_count === 1", async () => {
     let callCount = 0;
-    const crashThenSucceed: RunnerFn = async (card, opts) => {
+    const crashThenSucceed: RunnerFn = async (card) => {
       // Planner always succeeds
-      if (card.role === "planner") return fakeRunner(card, opts);
+      if (card.role === "planner") return fakeRunner(card);
       callCount++;
       if (callCount === 1) {
         throw new Error("First attempt crash");
       }
-      return fakeRunner(card, opts);
+      return fakeRunner(card);
     };
 
     const result = await runTier1(makeConfig(crashThenSucceed), makeRequest());
@@ -106,9 +107,9 @@ describe("runTier1", () => {
 
   it("max retries exceeded: always crash → success=false", async () => {
     const crashRunner = createCrashRunner({ mode: "crash", errorMessage: "always fails" });
-    const alwaysCrash: RunnerFn = async (card, opts) => {
-      if (card.role === "planner") return fakeRunner(card, opts);
-      return crashRunner(card, opts);
+    const alwaysCrash: RunnerFn = async (card) => {
+      if (card.role === "planner") return fakeRunner(card);
+      return crashRunner(card);
     };
 
     const result = await runTier1(makeConfig(alwaysCrash, 2), makeRequest());
@@ -119,13 +120,13 @@ describe("runTier1", () => {
 
   it("evidence fail: build_pass=false triggers retry", async () => {
     let callCount = 0;
-    const evidenceFailThenPass: RunnerFn = async (card, opts) => {
-      if (card.role === "planner") return fakeRunner(card, opts);
+    const evidenceFailThenPass: RunnerFn = async (card) => {
+      if (card.role === "planner") return fakeRunner(card);
       callCount++;
       if (callCount === 1) {
         return fakeRunner(card, { evidenceOverride: { build_pass: false } });
       }
-      return fakeRunner(card, opts);
+      return fakeRunner(card);
     };
 
     const result = await runTier1(makeConfig(evidenceFailThenPass), makeRequest());
@@ -152,4 +153,25 @@ describe("runTier1", () => {
     expect(events.length).toBe(1);
     expect(events[0].event).toBe("completed");
   });
+
+  it("planner malformed return → failure with error log", async () => {
+    const malformedPlanner: RunnerFn = async (card) => {
+      if (card.role === "planner") {
+        return { invalid: true } as any;
+      }
+      return fakeRunner(card);
+    };
+
+    const result = await runTier1(makeConfig(malformedPlanner), makeRequest());
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Planner returned malformed data");
+
+    const errors = readNdjson<Record<string, unknown>>(
+      path.join(logDir, "errors.ndjson"),
+    );
+    expect(errors.length).toBe(1);
+    expect(errors[0].error_type).toBe("malformed_return");
+    expect(errors[0].role).toBe("planner");
+  });
+
 });

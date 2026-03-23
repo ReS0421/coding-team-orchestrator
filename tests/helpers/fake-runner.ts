@@ -1,28 +1,16 @@
 import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
 import type { PlannerReturn } from "../../src/schemas/planner-return.js";
 import type { SpecialistSubmission } from "../../src/schemas/specialist-submission.js";
-import type { z } from "zod";
-import { EvidenceSchema } from "../../src/schemas/specialist-submission.js";
 import type { ReviewerReturn } from "../../src/schemas/reviewer-return.js";
 import type { LeadReturn } from "../../src/schemas/lead-return.js";
+import type { RunnerReturn } from "../../src/runners/types.js";
+import type { RunnerOptions, TestRunnerFn } from "./runner-options.js";
 
-export type RunnerReturn =
-  | PlannerReturn
-  | SpecialistSubmission
-  | ReviewerReturn
-  | LeadReturn;
-
-export interface RunnerOptions {
-  statusOverride?: SpecialistSubmission["status"];
-  evidenceOverride?: Partial<z.infer<typeof EvidenceSchema>>;
-  dispositionOverride?: ReviewerReturn["disposition_recommendation"];
-  delayMs?: number;
-}
-
-export type RunnerFn = (
-  card: DispatchCard,
-  opts?: RunnerOptions,
-) => Promise<RunnerReturn>;
+// Re-export for backward compatibility
+export type { RunnerReturn } from "../../src/runners/types.js";
+export type { RunnerOptions, TestRunnerFn } from "./runner-options.js";
+// Re-export RunnerFn from production for consumers that need it
+export type { RunnerFn } from "../../src/runners/types.js";
 
 function defaultSpecialist(card: DispatchCard, opts?: RunnerOptions): SpecialistSubmission {
   return {
@@ -74,7 +62,7 @@ function defaultLead(card: DispatchCard): LeadReturn {
   };
 }
 
-export const fakeRunner: RunnerFn = async (
+export const fakeRunner: TestRunnerFn = async (
   card: DispatchCard,
   opts?: RunnerOptions,
 ): Promise<RunnerReturn> => {

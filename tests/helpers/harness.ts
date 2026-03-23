@@ -1,5 +1,6 @@
 import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
-import type { RunnerFn, RunnerReturn, RunnerOptions } from "./fake-runner.js";
+import type { RunnerReturn } from "../../src/runners/types.js";
+import type { RunnerOptions, TestRunnerFn } from "./runner-options.js";
 
 export interface ExpectedResult {
   should_succeed: boolean;
@@ -16,7 +17,7 @@ export interface Scenario {
   name: string;
   tier: 1 | 2 | 3;
   dispatch_card: DispatchCard;
-  runner: RunnerFn;
+  runner: TestRunnerFn;
   runner_opts?: RunnerOptions;
   expected_result: ExpectedResult;
 }

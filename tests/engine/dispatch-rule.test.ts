@@ -65,7 +65,7 @@ describe("evaluateDispatchRule", () => {
       expect(result.planner_card).toBeUndefined();
     });
 
-    it("needs_planner = false when tasks_md approved and stale_soft", () => {
+    it("needs_planner = true when tasks_md approved but stale_soft", () => {
       const manifest = addArtifact(createEmptyManifest("test"), {
         id: "tasks_md",
         family: "reference",
@@ -75,7 +75,7 @@ describe("evaluateDispatchRule", () => {
         freshness: "stale_soft",
       });
       const result = evaluateDispatchRule(manifest, makeRequest());
-      expect(result.needs_planner).toBe(false);
+      expect(result.needs_planner).toBe(true); // 설계: freshness must be fresh to skip planner
     });
   });
 
@@ -121,3 +121,42 @@ describe("evaluateDispatchRule", () => {
     });
   });
 });
+
+  describe("scope_match and replan_required (R-1)", () => {
+    it("needs_planner = true when scope_match is false", () => {
+      const manifest = manifestWithApprovedTasks();
+      const result = evaluateDispatchRule(manifest, makeRequest({ scope_match: false }));
+      expect(result.needs_planner).toBe(true);
+      expect(result.planner_card).toBeDefined();
+    });
+
+    it("needs_planner = false when scope_match is true (explicit)", () => {
+      const manifest = manifestWithApprovedTasks();
+      const result = evaluateDispatchRule(manifest, makeRequest({ scope_match: true }));
+      expect(result.needs_planner).toBe(false);
+    });
+
+    it("needs_planner = false when scope_match is omitted (stub default)", () => {
+      const manifest = manifestWithApprovedTasks();
+      const result = evaluateDispatchRule(manifest, makeRequest());
+      expect(result.needs_planner).toBe(false);
+    });
+
+    it("needs_planner = true when replan_required is true", () => {
+      const manifest = manifestWithApprovedTasks();
+      const result = evaluateDispatchRule(manifest, makeRequest({ replan_required: true }));
+      expect(result.needs_planner).toBe(true);
+    });
+
+    it("needs_planner = false when replan_required is false", () => {
+      const manifest = manifestWithApprovedTasks();
+      const result = evaluateDispatchRule(manifest, makeRequest({ replan_required: false }));
+      expect(result.needs_planner).toBe(false);
+    });
+
+    it("scope_match=false overrides even when tasks_md is approved+fresh", () => {
+      const manifest = manifestWithApprovedTasks();
+      const result = evaluateDispatchRule(manifest, makeRequest({ scope_match: false }));
+      expect(result.needs_planner).toBe(true);
+    });
+  });

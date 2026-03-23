@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ProjectManifest } from "../store/types.js";
 import type { DispatchCard } from "../schemas/dispatch-card.js";
 import { findArtifact } from "../store/manifest.js";
@@ -8,6 +9,8 @@ export interface TaskRequest {
   write_scope: string[];
   input_refs?: string[];
   shared_surfaces?: SharedSurface[];
+  scope_match?: boolean;       // openclaw semantic judgment — true if request fits current tasks_md scope
+  replan_required?: boolean;   // explicit replan signal
 }
 
 export interface DispatchRuleResult {
@@ -24,19 +27,19 @@ export function evaluateDispatchRule(
   manifest: ProjectManifest,
   request: TaskRequest,
 ): DispatchRuleResult {
-  const needsPlanner = checkNeedsPlanner(manifest);
+  const needsPlanner = checkNeedsPlanner(manifest, request);
   const tier = judgeTier({
     write_scope: request.write_scope,
     shared_surfaces: request.shared_surfaces,
   });
 
-  const now = Date.now();
+  const uid = randomUUID().slice(0, 8);
 
   const specialistCard: DispatchCard = {
     version: 1,
     dispatch_rev: 1,
     role: "specialist",
-    id: `specialist-${now}`,
+    id: `specialist-${uid}`,
     tier,
     task: request.task,
     input_refs: request.input_refs ?? [],
@@ -57,7 +60,7 @@ export function evaluateDispatchRule(
     version: 1,
     dispatch_rev: 1,
     role: "planner",
-    id: `planner-${now}`,
+    id: `planner-${uid}`,
     tier,
     task: request.task,
     input_refs: request.input_refs ?? [],
@@ -77,10 +80,19 @@ export function evaluateDispatchRule(
   };
 }
 
-function checkNeedsPlanner(manifest: ProjectManifest): boolean {
+function checkNeedsPlanner(manifest: ProjectManifest, request: TaskRequest): boolean {
   const tasksMd = findArtifact(manifest, "tasks_md");
   if (!tasksMd) return true;
   if (tasksMd.lifecycle !== "approved") return true;
-  if (tasksMd.freshness === "stale_hard") return true;
+  if (tasksMd.freshness !== "fresh") return true; // 설계 §Dispatch Rule: freshness must be fresh
+
+  // 설계 §Dispatch Rule: scope_match — openclaw semantic judgment, 불확실 시 false → planner spawn
+  // TODO: 실제 semantic judgment는 Sprint 6 (real spawn) 시점에 구현
+  const scopeMatch = request.scope_match ?? true; // stub: 미지정 시 true (fake runner 환경)
+  if (!scopeMatch) return true;
+
+  // 설계 §Dispatch Rule: replan_required — 명시적 replan 신호
+  if (request.replan_required) return true;
+
   return false;
 }
