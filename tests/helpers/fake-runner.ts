@@ -1,6 +1,8 @@
 import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
 import type { PlannerReturn } from "../../src/schemas/planner-return.js";
-import type { SpecialistSubmission, Evidence } from "../../src/schemas/specialist-submission.js";
+import type { SpecialistSubmission } from "../../src/schemas/specialist-submission.js";
+import type { z } from "zod";
+import { EvidenceSchema } from "../../src/schemas/specialist-submission.js";
 import type { ReviewerReturn } from "../../src/schemas/reviewer-return.js";
 import type { LeadReturn } from "../../src/schemas/lead-return.js";
 
@@ -12,7 +14,7 @@ export type RunnerReturn =
 
 export interface RunnerOptions {
   statusOverride?: SpecialistSubmission["status"];
-  evidenceOverride?: Partial<Evidence>;
+  evidenceOverride?: Partial<z.infer<typeof EvidenceSchema>>;
   dispositionOverride?: ReviewerReturn["disposition_recommendation"];
   delayMs?: number;
 }
