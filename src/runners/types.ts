@@ -20,3 +20,18 @@ export type RunnerReturn =
 export type RunnerFn = (
   card: DispatchCard,
 ) => Promise<RunnerReturn>;
+
+// ─── Parallel execution types ───────────────────────────
+
+export interface SettledResult {
+  id: string;
+  status: "fulfilled" | "rejected";
+  value?: RunnerReturn;
+  error?: Error;
+}
+
+export interface ParallelResult {
+  settled: SettledResult[];
+  all_succeeded: boolean;
+  failed_ids: string[];
+}

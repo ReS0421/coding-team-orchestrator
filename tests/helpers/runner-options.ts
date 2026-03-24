@@ -1,6 +1,7 @@
 import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
 import type { SpecialistSubmission } from "../../src/schemas/specialist-submission.js";
 import type { ReviewerReturn } from "../../src/schemas/reviewer-return.js";
+import type { CrossCheckEntry } from "../../src/schemas/reviewer-return.js";
 import type { RunnerReturn } from "../../src/runners/types.js";
 
 // ─── Test-specific runner types ─────────────────────────
@@ -13,6 +14,8 @@ export interface RunnerOptions {
     test_summary: string;
   }>;
   dispositionOverride?: ReviewerReturn["disposition_recommendation"];
+  crossCheckOverride?: CrossCheckEntry[];
+  correctionBehavior?: "fail_then_pass" | "always_fail" | "always_pass";
   delayMs?: number;
 }
 

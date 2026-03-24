@@ -160,3 +160,145 @@ describe("evaluateDispatchRule", () => {
       expect(result.needs_planner).toBe(true);
     });
   });
+
+import { evaluateTier2DispatchRule } from "../../src/engine/dispatch-rule.js";
+import type { Brief } from "../../src/schemas/brief.js";
+
+function makeBrief(overrides?: Partial<Brief>): Brief {
+  return {
+    brief_id: "test-brief",
+    goal: "Test goal",
+    out_of_scope: [],
+    specialists: [
+      { id: "specialist-1", scope: ["src/auth/"], owns: ["src/auth/refresh.ts"] },
+      { id: "specialist-2", scope: ["src/api/"], owns: ["src/api/routes.ts"] },
+    ],
+    shared: [],
+    accept_checks: ["build passes"],
+    escalate_if: [],
+    ...overrides,
+  };
+}
+
+function manifestWithApprovedTasksT2(): ProjectManifest {
+  return addArtifact(createEmptyManifest("test"), {
+    id: "tasks_md",
+    path: "artifacts/tasks.md",
+    family: "reference",
+    lifecycle: "approved",
+    freshness: "fresh",
+    content_rev: 1,
+  });
+}
+
+describe("evaluateTier2DispatchRule", () => {
+  const manifest = manifestWithApprovedTasksT2();
+  const emptyManifest = createEmptyManifest("test");
+
+  it("generates one card per specialist", () => {
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "auth refresh", write_scope: ["src/auth/", "src/api/"] },
+      makeBrief(),
+    );
+    expect(result.specialist_cards).toHaveLength(2);
+    expect(result.specialist_cards[0].role).toBe("specialist");
+    expect(result.specialist_cards[1].role).toBe("specialist");
+  });
+
+  it("generates a reviewer card", () => {
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "auth refresh", write_scope: ["src/auth/", "src/api/"] },
+      makeBrief(),
+    );
+    expect(result.reviewer_card.role).toBe("reviewer");
+    expect(result.reviewer_card.tier).toBe(2);
+    expect(result.reviewer_card.input_refs).toHaveLength(2);
+  });
+
+  it("reviewer input_refs match specialist card ids", () => {
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "test", write_scope: ["src/"] },
+      makeBrief(),
+    );
+    const specialistIds = result.specialist_cards.map((c) => c.id);
+    expect(result.reviewer_card.input_refs).toEqual(specialistIds);
+  });
+
+  it("specialist cards reflect brief scope", () => {
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "test", write_scope: ["src/auth/", "src/api/"] },
+      makeBrief(),
+    );
+    expect(result.specialist_cards[0].write_scope).toEqual(["src/auth/"]);
+    expect(result.specialist_cards[1].write_scope).toEqual(["src/api/"]);
+  });
+
+  it("includes shared_surface when brief has shared", () => {
+    const brief = makeBrief({
+      shared: ["src/types/auth.ts"],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: [] },
+      ],
+    });
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "test", write_scope: ["src/auth/", "src/api/"] },
+      brief,
+    );
+    expect(result.specialist_cards[0].shared_surface).toBeDefined();
+    expect(result.specialist_cards[0].shared_surface![0].owner).toBe("specialist-1");
+  });
+
+  it("no shared_surface field when brief.shared is empty", () => {
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "test", write_scope: ["src/"] },
+      makeBrief(),
+    );
+    expect(result.specialist_cards[0].shared_surface).toBeUndefined();
+  });
+
+  it("generates planner card when tasks_md missing", () => {
+    const result = evaluateTier2DispatchRule(
+      emptyManifest,
+      { task: "test", write_scope: ["src/"] },
+      makeBrief(),
+    );
+    expect(result.needs_planner).toBe(true);
+    expect(result.planner_card).toBeDefined();
+    expect(result.planner_card!.role).toBe("planner");
+    expect(result.planner_card!.tier).toBe(2);
+  });
+
+  it("skips planner when tasks_md exists and approved+fresh", () => {
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "test", write_scope: ["src/auth/", "src/api/"] },
+      makeBrief(),
+    );
+    expect(result.needs_planner).toBe(false);
+    expect(result.planner_card).toBeUndefined();
+  });
+
+  it("generates 3 specialist cards for 3-specialist brief", () => {
+    const brief = makeBrief({
+      specialists: [
+        { id: "s-1", scope: ["src/a/"], owns: [] },
+        { id: "s-2", scope: ["src/b/"], owns: [] },
+        { id: "s-3", scope: ["src/c/"], owns: [] },
+      ],
+    });
+    const result = evaluateTier2DispatchRule(
+      manifest,
+      { task: "test", write_scope: ["src/a/", "src/b/", "src/c/"] },
+      brief,
+    );
+    expect(result.specialist_cards).toHaveLength(3);
+    expect(result.reviewer_card.input_refs).toHaveLength(3);
+  });
+});

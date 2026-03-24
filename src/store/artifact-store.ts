@@ -77,3 +77,30 @@ export function deleteArtifact(
   const fullPath = resolvePath(projectRoot, artifactPath);
   fs.unlinkSync(fullPath);
 }
+
+// ─── Brief thin wrappers ────────────────────────────────
+
+import type { Brief } from "../schemas/brief.js";
+import { validateBrief } from "../schemas/brief.js";
+
+const BRIEF_PATH = "artifacts/brief.yaml";
+
+/**
+ * Save a Brief to artifacts/brief.yaml.
+ */
+export function saveBrief(projectRoot: string, brief: Brief): void {
+  const { brief_id, goal, ...rest } = brief;
+  writeArtifact(projectRoot, BRIEF_PATH, { brief_id, goal }, yaml.dump(rest, { lineWidth: -1 }));
+}
+
+/**
+ * Load and validate a Brief from artifacts/brief.yaml.
+ */
+export function loadBrief(projectRoot: string): Brief {
+  const artifact = readArtifact(projectRoot, BRIEF_PATH);
+  const data = {
+    ...artifact.frontmatter,
+    ...yaml.load(artifact.body) as Record<string, unknown>,
+  };
+  return validateBrief(data);
+}

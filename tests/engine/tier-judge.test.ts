@@ -64,3 +64,79 @@ describe("judgeTier", () => {
     ).toBe(Tier.ONE);
   });
 });
+
+describe("judgeTier - Tier 2 specifics", () => {
+  it("returns Tier 2 with 2 controllable shared surfaces", () => {
+    expect(
+      judgeTier({
+        write_scope: ["a.ts", "b.ts"],
+        shared_surfaces: [
+          { path: "shared1.ts", rule: "lock", owner: "s-1" },
+          { path: "shared2.ts", rule: "lock", owner: "s-2" },
+        ],
+        specialist_count: 2,
+      }),
+    ).toBe(Tier.TWO);
+  });
+
+  it("returns Tier 2 with specialist_count = 3", () => {
+    expect(
+      judgeTier({ write_scope: Array.from({ length: 10 }, (_, i) => `f${i}.ts`), specialist_count: 3 }),
+    ).toBe(Tier.TWO);
+  });
+
+  it("returns Tier 2 with write_scope = 20 (boundary)", () => {
+    expect(
+      judgeTier({ write_scope: Array.from({ length: 20 }, (_, i) => `f${i}.ts`), specialist_count: 2 }),
+    ).toBe(Tier.TWO);
+  });
+});
+
+describe("judgeTier - Tier 3 guard", () => {
+  it("throws for 3+ shared surfaces", () => {
+    expect(() =>
+      judgeTier({
+        write_scope: ["a.ts"],
+        shared_surfaces: [
+          { path: "s1.ts", rule: "r", owner: "o1" },
+          { path: "s2.ts", rule: "r", owner: "o2" },
+          { path: "s3.ts", rule: "r", owner: "o3" },
+        ],
+      }),
+    ).toThrow("Tier 3 not supported yet");
+  });
+
+  it("throws for uncontrollable shared surface", () => {
+    expect(() =>
+      judgeTier({
+        write_scope: ["a.ts"],
+        shared_surfaces: [
+          { path: "s1.ts", rule: "r", owner: "o1", controllable: false },
+        ],
+      }),
+    ).toThrow("uncontrollable");
+  });
+
+  it("throws for shared surface without owner", () => {
+    expect(() =>
+      judgeTier({
+        write_scope: ["a.ts"],
+        shared_surfaces: [
+          { path: "s1.ts", rule: "r", owner: "" },
+        ],
+      }),
+    ).toThrow("without owner");
+  });
+
+  it("throws for specialist_count > 3", () => {
+    expect(() =>
+      judgeTier({ write_scope: ["a.ts"], specialist_count: 4 }),
+    ).toThrow("Tier 3 not supported yet");
+  });
+
+  it("throws for write_scope > 20", () => {
+    expect(() =>
+      judgeTier({ write_scope: Array.from({ length: 21 }, (_, i) => `f${i}.ts`), specialist_count: 2 }),
+    ).toThrow("Tier 3 not supported yet");
+  });
+});

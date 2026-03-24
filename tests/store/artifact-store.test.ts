@@ -107,3 +107,58 @@ describe("artifact file CRUD", () => {
     expect(result.body).toBe("new");
   });
 });
+
+import { saveBrief, loadBrief } from "../../src/store/artifact-store.js";
+
+describe("Brief thin wrapper", () => {
+  let projectRoot: string;
+
+  beforeEach(() => {
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "brief-store-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it("round-trips a brief (save → load)", () => {
+    const brief = {
+      brief_id: "test-brief",
+      goal: "Test goal",
+      out_of_scope: ["DB changes"],
+      specialists: [
+        { id: "s-1", scope: ["src/a/"], owns: ["src/a/file.ts"] },
+        { id: "s-2", scope: ["src/b/"], owns: [] },
+      ],
+      shared: ["src/shared.ts"],
+      accept_checks: ["build passes"],
+      escalate_if: ["shared files 3+"],
+    };
+    saveBrief(projectRoot, brief);
+    const loaded = loadBrief(projectRoot);
+    expect(loaded.brief_id).toBe(brief.brief_id);
+    expect(loaded.goal).toBe(brief.goal);
+    expect(loaded.specialists).toHaveLength(2);
+    expect(loaded.specialists[0].id).toBe("s-1");
+    expect(loaded.shared).toEqual(["src/shared.ts"]);
+    expect(loaded.accept_checks).toEqual(["build passes"]);
+  });
+
+  it("round-trips a brief with empty shared", () => {
+    const brief = {
+      brief_id: "no-shared",
+      goal: "No shared test",
+      out_of_scope: [],
+      specialists: [
+        { id: "s-1", scope: ["src/"], owns: [] },
+      ],
+      shared: [],
+      accept_checks: ["tests pass"],
+      escalate_if: [],
+    };
+    saveBrief(projectRoot, brief);
+    const loaded = loadBrief(projectRoot);
+    expect(loaded.shared).toEqual([]);
+    expect(loaded.escalate_if).toEqual([]);
+  });
+});

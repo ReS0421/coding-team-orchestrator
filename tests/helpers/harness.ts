@@ -134,3 +134,21 @@ export function makeDispatchCard(
     ...overrides,
   };
 }
+
+import type { Brief } from "../../src/schemas/brief.js";
+
+export function makeBrief(overrides?: Partial<Brief>): Brief {
+  return {
+    brief_id: "test-brief",
+    goal: "Test goal",
+    out_of_scope: [],
+    specialists: [
+      { id: "specialist-1", scope: ["src/auth/"], owns: [] },
+      { id: "specialist-2", scope: ["src/api/"], owns: [] },
+    ],
+    shared: [],
+    accept_checks: ["build passes"],
+    escalate_if: [],
+    ...overrides,
+  };
+}

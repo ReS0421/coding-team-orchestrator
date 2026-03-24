@@ -2,6 +2,7 @@ import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
 import type { PlannerReturn } from "../../src/schemas/planner-return.js";
 import type { SpecialistSubmission } from "../../src/schemas/specialist-submission.js";
 import type { ReviewerReturn } from "../../src/schemas/reviewer-return.js";
+import type { CrossCheckEntry } from "../../src/schemas/reviewer-return.js";
 import type { LeadReturn } from "../../src/schemas/lead-return.js";
 import type { RunnerReturn } from "../../src/runners/types.js";
 import type { RunnerOptions, TestRunnerFn } from "./runner-options.js";
@@ -9,8 +10,15 @@ import type { RunnerOptions, TestRunnerFn } from "./runner-options.js";
 // Re-export for backward compatibility
 export type { RunnerReturn } from "../../src/runners/types.js";
 export type { RunnerOptions, TestRunnerFn } from "./runner-options.js";
-// Re-export RunnerFn from production for consumers that need it
 export type { RunnerFn } from "../../src/runners/types.js";
+
+const DEFAULT_CROSS_CHECK: CrossCheckEntry[] = [
+  { check: "scope_violation", pass: true },
+  { check: "shared_file", pass: true },
+  { check: "interface_mismatch", pass: true },
+  { check: "test_coverage", pass: true },
+  { check: "goal_met", pass: true },
+];
 
 function defaultSpecialist(card: DispatchCard, opts?: RunnerOptions): SpecialistSubmission {
   return {
@@ -38,6 +46,30 @@ function defaultReviewer(card: DispatchCard, opts?: RunnerOptions): ReviewerRetu
     review_report: "Review of " + card.id + ": PASS",
     disposition_recommendation: opts?.dispositionOverride ?? "PASS",
     issues: [],
+    cross_check: opts?.crossCheckOverride ?? DEFAULT_CROSS_CHECK,
+  };
+}
+
+function failReviewer(card: DispatchCard): ReviewerReturn {
+  return {
+    review_report: "Review of " + card.id + ": FAIL",
+    disposition_recommendation: "FAIL",
+    issues: [
+      {
+        issue_id: "REV-AUTO-1",
+        severity: "critical",
+        blocking: true,
+        evidence: "automated test failure",
+        fix_owner: "specialist-1",
+      },
+    ],
+    cross_check: [
+      { check: "scope_violation", pass: true },
+      { check: "shared_file", pass: true },
+      { check: "interface_mismatch", pass: false, detail: "mismatch detected" },
+      { check: "test_coverage", pass: true },
+      { check: "goal_met", pass: false, detail: "goal not met" },
+    ],
   };
 }
 
@@ -84,3 +116,43 @@ export const fakeRunner: TestRunnerFn = async (
       throw new Error(`Unknown role: ${card.role}`);
   }
 };
+
+/**
+ * Create a stateful runner that supports correction behavior.
+ * Tracks reviewer call count for fail_then_pass scenarios.
+ */
+export function createStatefulRunner(opts?: RunnerOptions): TestRunnerFn {
+  let reviewerCallCount = 0;
+
+  return async (card: DispatchCard, runOpts?: RunnerOptions): Promise<RunnerReturn> => {
+    const mergedOpts = { ...opts, ...runOpts };
+
+    if (mergedOpts?.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, mergedOpts.delayMs));
+    }
+
+    switch (card.role) {
+      case "planner":
+        return defaultPlanner(card);
+      case "specialist":
+      case "shared_owner":
+        return defaultSpecialist(card, mergedOpts);
+      case "reviewer": {
+        reviewerCallCount++;
+        const behavior = mergedOpts?.correctionBehavior ?? "always_pass";
+
+        if (behavior === "always_fail") {
+          return failReviewer(card);
+        }
+        if (behavior === "fail_then_pass" && reviewerCallCount === 1) {
+          return failReviewer(card);
+        }
+        return defaultReviewer(card, mergedOpts);
+      }
+      case "execution_lead":
+        return defaultLead(card);
+      default:
+        throw new Error(`Unknown role: ${card.role}`);
+    }
+  };
+}

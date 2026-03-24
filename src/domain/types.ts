@@ -106,3 +106,33 @@ export const ChangeClass = {
   COSMETIC: "cosmetic",
 } as const;
 export type ChangeClass = (typeof ChangeClass)[keyof typeof ChangeClass];
+
+// ─── BriefState (설계 §Tier 2 상태값) ───────────────────
+export const BriefState = {
+  BRIEFED: "briefed",
+  IN_PROGRESS: "in_progress",
+  NEEDS_FIX: "needs_fix",
+  DONE: "done",
+  ESCALATED: "escalated",
+} as const;
+export type BriefState = (typeof BriefState)[keyof typeof BriefState];
+
+// ─── Phase (설계 §Execution Flow) ───────────────────────
+export const Phase = {
+  INTAKE: "intake",
+  PLANNING: "planning",
+  EXECUTION: "execution",
+  REVIEW: "review",
+  CORRECTION: "correction",
+  DONE: "done",
+  FAILED: "failed",
+} as const;
+export type Phase = (typeof Phase)[keyof typeof Phase];
+
+// ─── CorrectionDisposition (설계 §Correction) ──────────
+export const CorrectionDisposition = {
+  FIX_AND_REREVIEW: "fix_and_rereview",
+  ESCALATE: "escalate",
+  ABORT: "abort",
+} as const;
+export type CorrectionDisposition = (typeof CorrectionDisposition)[keyof typeof CorrectionDisposition];

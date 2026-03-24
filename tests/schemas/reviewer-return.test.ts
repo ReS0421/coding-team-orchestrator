@@ -54,3 +54,43 @@ describe("ReviewerReturn - invalid", () => {
     expect(() => validateReviewerReturn(badIssue)).toThrow();
   });
 });
+
+describe("ReviewerReturn - cross_check", () => {
+  it("accepts return without cross_check (backward compat)", () => {
+    expect(() => validateReviewerReturn(validReturn)).not.toThrow();
+  });
+
+  it("accepts return with valid cross_check entries", () => {
+    const withCrossCheck = {
+      ...validReturn,
+      cross_check: [
+        { check: "scope_violation", pass: true },
+        { check: "shared_file", pass: true, detail: "no shared modifications" },
+        { check: "interface_mismatch", pass: false, detail: "specialist-1 exports missing" },
+        { check: "test_coverage", pass: true },
+        { check: "goal_met", pass: true },
+      ],
+    };
+    expect(() => validateReviewerReturn(withCrossCheck)).not.toThrow();
+  });
+
+  it("accepts empty cross_check array", () => {
+    expect(() => validateReviewerReturn({ ...validReturn, cross_check: [] })).not.toThrow();
+  });
+
+  it("rejects invalid check type in cross_check", () => {
+    const bad = {
+      ...validReturn,
+      cross_check: [{ check: "invalid_check", pass: true }],
+    };
+    expect(() => validateReviewerReturn(bad)).toThrow();
+  });
+
+  it("rejects cross_check entry missing pass field", () => {
+    const bad = {
+      ...validReturn,
+      cross_check: [{ check: "scope_violation" }],
+    };
+    expect(() => validateReviewerReturn(bad)).toThrow();
+  });
+});
