@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ErrorLog } from "../schemas/error-log.js";
+import type { EventLogEntry } from "../schemas/event-log.js";
 
 const EVENT_LOG_FILE = "events.ndjson";
 const ERROR_LOG_FILE = "errors.ndjson";
@@ -9,7 +10,7 @@ const ERROR_LOG_FILE = "errors.ndjson";
  * Append an event to the NDJSON event log.
  */
 export function appendEventLog(
-  event: Record<string, unknown>,
+  event: EventLogEntry,
   options: { logDir: string },
 ): void {
   const filePath = path.resolve(options.logDir, EVENT_LOG_FILE);

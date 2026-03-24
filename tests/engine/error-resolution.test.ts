@@ -70,3 +70,33 @@ describe("resolveError", () => {
     }))).toBe("escalate");
   });
 });
+
+describe("resolveError — tier3_escalation", () => {
+  it("returns tier3_escalation when flag is set", () => {
+    expect(resolveError(makeCtx({ tier3_escalation: true }))).toBe("tier3_escalation");
+  });
+
+  it("tier3_escalation takes priority over retry", () => {
+    expect(resolveError(makeCtx({
+      tier3_escalation: true,
+      retry_count: 0,
+      is_final_attempt: false,
+    }))).toBe("tier3_escalation");
+  });
+
+  it("tier3_escalation takes priority over escalate", () => {
+    expect(resolveError(makeCtx({
+      tier3_escalation: true,
+      correction_count: 2,
+      is_final_attempt: true,
+    }))).toBe("tier3_escalation");
+  });
+
+  it("does not return tier3_escalation when flag is false", () => {
+    expect(resolveError(makeCtx({ tier3_escalation: false }))).toBe("retry");
+  });
+
+  it("does not return tier3_escalation when flag is undefined", () => {
+    expect(resolveError(makeCtx())).toBe("retry");
+  });
+});

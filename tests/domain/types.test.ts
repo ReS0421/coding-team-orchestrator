@@ -158,3 +158,91 @@ describe("ChangeClass", () => {
     expect(Object.values(ChangeClass)).toHaveLength(4);
   });
 });
+
+// ─── Sprint 2 types ─────────────────────────────────────
+
+import {
+  BriefState,
+  Phase,
+  CorrectionDisposition,
+} from "../../src/domain/types.js";
+
+describe("BriefState", () => {
+  it("has all 5 states", () => {
+    expect(BriefState.BRIEFED).toBe("briefed");
+    expect(BriefState.IN_PROGRESS).toBe("in_progress");
+    expect(BriefState.NEEDS_FIX).toBe("needs_fix");
+    expect(BriefState.DONE).toBe("done");
+    expect(BriefState.ESCALATED).toBe("escalated");
+  });
+  it("has 5 values", () => {
+    expect(Object.values(BriefState)).toHaveLength(5);
+  });
+});
+
+describe("Phase", () => {
+  it("has all 7 phases", () => {
+    expect(Phase.INTAKE).toBe("intake");
+    expect(Phase.PLANNING).toBe("planning");
+    expect(Phase.EXECUTION).toBe("execution");
+    expect(Phase.REVIEW).toBe("review");
+    expect(Phase.CORRECTION).toBe("correction");
+    expect(Phase.DONE).toBe("done");
+    expect(Phase.FAILED).toBe("failed");
+  });
+  it("has 7 values", () => {
+    expect(Object.values(Phase)).toHaveLength(7);
+  });
+});
+
+describe("CorrectionDisposition", () => {
+  it("has fix_and_rereview, escalate, abort", () => {
+    expect(CorrectionDisposition.FIX_AND_REREVIEW).toBe("fix_and_rereview");
+    expect(CorrectionDisposition.ESCALATE).toBe("escalate");
+    expect(CorrectionDisposition.ABORT).toBe("abort");
+  });
+  it("has 3 values", () => {
+    expect(Object.values(CorrectionDisposition)).toHaveLength(3);
+  });
+});
+
+// ─── Sprint 3 types ─────────────────────────────────────
+
+import {
+  SharedChangeType,
+  SharedCommitState,
+  BlockedReason,
+} from "../../src/domain/types.js";
+
+describe("SharedChangeType", () => {
+  it("has owner_committed, unexpected_amendment, consumer_blocked", () => {
+    expect(SharedChangeType.OWNER_COMMITTED).toBe("owner_committed");
+    expect(SharedChangeType.UNEXPECTED_AMENDMENT).toBe("unexpected_amendment");
+    expect(SharedChangeType.CONSUMER_BLOCKED).toBe("consumer_blocked");
+  });
+  it("has 3 values", () => {
+    expect(Object.values(SharedChangeType)).toHaveLength(3);
+  });
+});
+
+describe("SharedCommitState", () => {
+  it("has pending, committed, failed", () => {
+    expect(SharedCommitState.PENDING).toBe("pending");
+    expect(SharedCommitState.COMMITTED).toBe("committed");
+    expect(SharedCommitState.FAILED).toBe("failed");
+  });
+  it("has 3 values", () => {
+    expect(Object.values(SharedCommitState)).toHaveLength(3);
+  });
+});
+
+describe("BlockedReason", () => {
+  it("has shared_pending, dependency, context_missing", () => {
+    expect(BlockedReason.SHARED_PENDING).toBe("shared_pending");
+    expect(BlockedReason.DEPENDENCY).toBe("dependency");
+    expect(BlockedReason.CONTEXT_MISSING).toBe("context_missing");
+  });
+  it("has 3 values", () => {
+    expect(Object.values(BlockedReason)).toHaveLength(3);
+  });
+});

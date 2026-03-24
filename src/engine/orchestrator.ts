@@ -14,6 +14,7 @@ import {
   saveManifest,
 } from "../store/manifest.js";
 import { appendEventLog, appendErrorLog } from "../store/log-writer.js";
+import type { EventLogEntry } from "../schemas/event-log.js";
 import { evaluateDispatchRule, type TaskRequest } from "./dispatch-rule.js";
 import { judgeTier } from "./tier-judge.js";
 
@@ -203,7 +204,7 @@ export async function runTier1(
       // ── SUCCESS ──
       specialistResult = submission;
       appendEventLog(
-        { event: "completed", session_id: sessionId, task: request.task, timestamp: new Date().toISOString() },
+        { ts: new Date().toISOString(), event: "completed", session_id: sessionId, task: request.task } as EventLogEntry,
         { logDir: config.logDir },
       );
 
@@ -488,7 +489,7 @@ export async function runTier2(
     // PASS → done
     if (reviewResult.disposition_recommendation === "PASS") {
       appendEventLog(
-        { event: "completed", session_id: sessionId, task: request.task, timestamp: new Date().toISOString() },
+        { ts: new Date().toISOString(), event: "completed", session_id: sessionId, task: request.task } as EventLogEntry,
         { logDir: config.logDir },
       );
       return {

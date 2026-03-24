@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
 import { createSpawnAdapter } from "../../src/runners/spawn-adapter.js";
 import { fakeRunner } from "../helpers/fake-runner.js";
 import { makeDispatchCard } from "../helpers/harness.js";
@@ -94,5 +95,175 @@ describe("runParallel", () => {
     ];
     const result = await runParallel(cards, fakeRunner);
     expect(result.settled.map((s) => s.id)).toEqual(["alpha", "beta", "gamma"]);
+  });
+});
+
+// ─── Sprint 3: runSharedExecution ───────────────────────
+
+import {
+  runSharedExecution,
+  type SharedExecutionOptions,
+} from "../../src/runners/spawn-adapter.js";
+
+function makeCard(id: string, overrides?: Partial<DispatchCard>): DispatchCard {
+  return {
+    version: 1,
+    dispatch_rev: 1,
+    role: "specialist",
+    id,
+    tier: 2,
+    task: "test",
+    input_refs: [],
+    entrypoint: [],
+    must_read: [],
+    authoritative_artifact: [],
+    write_scope: [],
+    completion_check: [],
+    return_format: { schema: "specialist_submission_v1" },
+    timeout_profile: { class: "standard", heartbeat_required: false },
+    ...overrides,
+  };
+}
+
+const validSubmission = {
+  status: "done" as const,
+  touched_files: ["src/index.ts"],
+  changeset: "abc",
+  delta_stub: "diff",
+  evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+};
+
+describe("runSharedExecution", () => {
+  it("runs owner then consumer in order", async () => {
+    const callOrder: string[] = [];
+    const runner = async (card: DispatchCard) => {
+      callOrder.push(card.id);
+      return validSubmission;
+    };
+
+    const result = await runSharedExecution({
+      ownerCards: [makeCard("owner-1", { is_shared_owner: true, spawn_order: 1 })],
+      consumerCards: [makeCard("consumer-1", { selective_hold: true, spawn_order: 2 })],
+      runner,
+    });
+
+    expect(callOrder[0]).toBe("owner-1");
+    expect(callOrder[1]).toBe("consumer-1");
+    expect(result.all_succeeded).toBe(true);
+    expect(result.tier3_escalation).toBe(false);
+  });
+
+  it("owner failure → retry → success → consumer runs", async () => {
+    let ownerCalls = 0;
+    const runner = async (card: DispatchCard) => {
+      if (card.id === "owner-1") {
+        ownerCalls++;
+        if (ownerCalls === 1) throw new Error("crash");
+      }
+      return validSubmission;
+    };
+
+    const result = await runSharedExecution({
+      ownerCards: [makeCard("owner-1")],
+      consumerCards: [makeCard("consumer-1")],
+      runner,
+      maxOwnerRetries: 2,
+    });
+
+    expect(result.all_succeeded).toBe(true);
+    expect(ownerCalls).toBe(2);
+  });
+
+  it("owner failure → retry exhausted → consumer skip", async () => {
+    const runner = async (card: DispatchCard) => {
+      if (card.id === "owner-1") throw new Error("crash");
+      return validSubmission;
+    };
+
+    const result = await runSharedExecution({
+      ownerCards: [makeCard("owner-1")],
+      consumerCards: [makeCard("consumer-1")],
+      runner,
+      maxOwnerRetries: 1,
+    });
+
+    expect(result.all_succeeded).toBe(false);
+    expect(result.consumer_results.settled).toHaveLength(0);
+  });
+
+  it("consumer BLOCKED → onConsumerBlocked callback called", async () => {
+    let callbackCalled = false;
+    const blockedSubmission = {
+      ...validSubmission,
+      status: "blocked" as const,
+      blocked_on: { reason: "shared_pending" as const, surface: "src/shared.ts", owner_id: "owner-1" },
+    };
+
+    let consumerCalls = 0;
+    const runner = async (card: DispatchCard) => {
+      if (card.id === "consumer-1") {
+        consumerCalls++;
+        if (consumerCalls === 1) return blockedSubmission;
+      }
+      return validSubmission;
+    };
+
+    const result = await runSharedExecution({
+      ownerCards: [makeCard("owner-1")],
+      consumerCards: [makeCard("consumer-1")],
+      runner,
+      onConsumerBlocked: (_blocked, _ctx) => {
+        callbackCalled = true;
+        return "retry";
+      },
+    });
+
+    expect(callbackCalled).toBe(true);
+  });
+
+  it("redispatch max exceeded → tier3_escalation", async () => {
+    const blockedSubmission = {
+      ...validSubmission,
+      status: "blocked" as const,
+      blocked_on: { reason: "shared_pending" as const, surface: "src/shared.ts", owner_id: "owner-1" },
+    };
+
+    const runner = async (card: DispatchCard) => {
+      if (card.id === "consumer-1") return blockedSubmission;
+      return validSubmission;
+    };
+
+    const result = await runSharedExecution({
+      ownerCards: [makeCard("owner-1")],
+      consumerCards: [makeCard("consumer-1")],
+      runner,
+      onConsumerBlocked: () => "redispatch_owner",
+      maxOwnerRedispatch: 0,
+    });
+
+    expect(result.tier3_escalation).toBe(true);
+  });
+
+  it("escalate_tier3 from callback → immediate stop", async () => {
+    const blockedSubmission = {
+      ...validSubmission,
+      status: "blocked" as const,
+      blocked_on: { reason: "shared_pending" as const, surface: "src/shared.ts", owner_id: "owner-1" },
+    };
+
+    const runner = async (card: DispatchCard) => {
+      if (card.id === "consumer-1") return blockedSubmission;
+      return validSubmission;
+    };
+
+    const result = await runSharedExecution({
+      ownerCards: [makeCard("owner-1")],
+      consumerCards: [makeCard("consumer-1")],
+      runner,
+      onConsumerBlocked: () => "escalate_tier3",
+    });
+
+    expect(result.tier3_escalation).toBe(true);
+    expect(result.all_succeeded).toBe(false);
   });
 });

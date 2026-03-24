@@ -19,8 +19,9 @@ export const ErrorLogSchema = z.object({
   affected_tasks: z.array(z.string()),
   artifact_refs: z.array(z.string()),
   resolution: z
-    .enum(["retry", "reassign", "escalate", "abort", "salvage"])
+    .enum(["retry", "escalate", "abort", "tier3_escalation", "reassign"])
     .optional(),
+  // "reassign" → Sprint 5 Tier 3용 예약
   notes: z.string().optional(),
 });
 

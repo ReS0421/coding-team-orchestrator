@@ -4,6 +4,7 @@ export const SharedSurfaceEntrySchema = z.object({
   path: z.string().min(1),
   rule: z.string().min(1),
   owner: z.string().min(1),
+  controllable: z.boolean().optional(), // default true — tier-judge와 정합
 });
 
 export const TimeoutProfileSchema = z.object({
@@ -32,6 +33,12 @@ export const DispatchCardSchema = z.object({
   completion_check: z.array(z.string()),
   return_format: ReturnFormatSchema,
   timeout_profile: TimeoutProfileSchema,
+  // Sprint 3: shared protocol fields
+  priority_task: z.string().optional(),       // shared owner: "shared interface 선행 수정" 지시
+  selective_hold: z.boolean().optional(),     // consumer: "non-shared 작업 선행" 지시
+  spawn_order: z.number().int().optional(),   // owner=1, consumer=2
+  is_acting_lead: z.boolean().optional(),     // specialist 겸임 acting lead
+  is_shared_owner: z.boolean().optional(),    // Tier 2: specialist가 shared owner 겸임 (Tier 3은 role: "shared_owner")
 });
 
 export type DispatchCard = z.infer<typeof DispatchCardSchema>;

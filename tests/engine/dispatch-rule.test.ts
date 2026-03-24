@@ -302,3 +302,105 @@ describe("evaluateTier2DispatchRule", () => {
     expect(result.reviewer_card.input_refs).toHaveLength(3);
   });
 });
+
+// ─── Sprint 3: shared protocol in dispatch-rule ────────
+
+describe("evaluateTier2DispatchRule — shared", () => {
+  const emptyManifest = createEmptyManifest("test");
+  const baseRequest = { task: "test", write_scope: ["src/auth/", "src/api/"] };
+
+  it("sets is_shared_owner, spawn_order, priority_task on owner card", () => {
+    const brief: Brief = {
+      brief_id: "b1",
+      goal: "test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: ["src/api/routes.ts"] },
+      ],
+      shared: ["src/types/auth.ts"],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+    const result = evaluateTier2DispatchRule(emptyManifest, baseRequest, brief);
+    const ownerCard = result.specialist_cards.find((c) => c.is_shared_owner);
+    expect(ownerCard).toBeDefined();
+    expect(ownerCard!.spawn_order).toBe(1);
+    expect(ownerCard!.priority_task).toContain("src/types/auth.ts");
+  });
+
+  it("sets selective_hold, spawn_order=2 on consumer card", () => {
+    const brief: Brief = {
+      brief_id: "b1",
+      goal: "test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: ["src/api/routes.ts"] },
+      ],
+      shared: ["src/types/auth.ts"],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+    const result = evaluateTier2DispatchRule(emptyManifest, baseRequest, brief);
+    const consumerCard = result.specialist_cards.find((c) => !c.is_shared_owner);
+    expect(consumerCard).toBeDefined();
+    expect(consumerCard!.selective_hold).toBe(true);
+    expect(consumerCard!.spawn_order).toBe(2);
+  });
+
+  it("sets acting_lead_id and is_acting_lead on owner card", () => {
+    const brief: Brief = {
+      brief_id: "b1",
+      goal: "test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: ["src/api/routes.ts"] },
+      ],
+      shared: ["src/types/auth.ts"],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+    const result = evaluateTier2DispatchRule(emptyManifest, baseRequest, brief);
+    expect(result.acting_lead_id).toBe("specialist-1");
+    const leadCard = result.specialist_cards.find((c) => c.is_acting_lead);
+    expect(leadCard).toBeDefined();
+  });
+
+  it("manifest_lite_required=true when shared", () => {
+    const brief: Brief = {
+      brief_id: "b1",
+      goal: "test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: [] },
+      ],
+      shared: ["src/types/auth.ts"],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+    const result = evaluateTier2DispatchRule(emptyManifest, baseRequest, brief);
+    expect(result.manifest_lite_required).toBe(true);
+    expect(result.has_shared).toBe(true);
+  });
+
+  it("manifest_lite_required=false for shared-free 2 specialists", () => {
+    const sfBrief: Brief = {
+      brief_id: "b-sf",
+      goal: "test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/auth/refresh.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: ["src/api/routes.ts"] },
+      ],
+      shared: [],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+    const result = evaluateTier2DispatchRule(emptyManifest, baseRequest, sfBrief);
+    expect(result.manifest_lite_required).toBe(false);
+    expect(result.has_shared).toBe(false);
+  });
+});

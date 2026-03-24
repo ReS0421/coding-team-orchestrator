@@ -25,6 +25,7 @@ import {
 } from "../../src/domain/types.js";
 import type { ManifestPatchSet } from "../../src/schemas/manifest-patch.js";
 import type { ErrorLog } from "../../src/schemas/error-log.js";
+import type { EventLogEntry } from "../../src/schemas/event-log.js";
 
 describe("store integration", () => {
   let tmpDir: string;
@@ -236,11 +237,11 @@ describe("store integration", () => {
 
     // Write events
     appendEventLog(
-      { type: "patch_applied", manifest_seq: 1, timestamp: "2026-03-21T14:00:00Z" },
+      { ts: "2026-03-21T14:00:00Z", event: "patch_committed", manifest_seq: 1 } as EventLogEntry,
       { logDir },
     );
     appendEventLog(
-      { type: "freshness_propagated", affected: ["spec", "tasks"], timestamp: "2026-03-21T14:01:00Z" },
+      { ts: "2026-03-21T14:01:00Z", event: "completed", affected: ["spec", "tasks"] } as EventLogEntry,
       { logDir },
     );
 
@@ -262,7 +263,7 @@ describe("store integration", () => {
     // Read back
     const events = readNdjson(path.join(logDir, "events.ndjson"));
     expect(events).toHaveLength(2);
-    expect((events[0] as Record<string, unknown>)["type"]).toBe("patch_applied");
+    expect((events[0] as Record<string, unknown>)["event"]).toBe("patch_committed");
 
     const errors = readNdjson<ErrorLog>(path.join(logDir, "errors.ndjson"));
     expect(errors).toHaveLength(1);

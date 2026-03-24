@@ -136,3 +136,27 @@ export const CorrectionDisposition = {
   ABORT: "abort",
 } as const;
 export type CorrectionDisposition = (typeof CorrectionDisposition)[keyof typeof CorrectionDisposition];
+
+// ─── SharedChangeType (설계 §Shared Protocol) ──────────
+export const SharedChangeType = {
+  OWNER_COMMITTED: "owner_committed",
+  UNEXPECTED_AMENDMENT: "unexpected_amendment",
+  CONSUMER_BLOCKED: "consumer_blocked",
+} as const;
+export type SharedChangeType = (typeof SharedChangeType)[keyof typeof SharedChangeType];
+
+// ─── SharedCommitState (설계 §Shared Protocol) ─────────
+export const SharedCommitState = {
+  PENDING: "pending",
+  COMMITTED: "committed",
+  FAILED: "failed",
+} as const;
+export type SharedCommitState = (typeof SharedCommitState)[keyof typeof SharedCommitState];
+
+// ─── BlockedReason (설계 §Specialist Submission) ───────
+export const BlockedReason = {
+  SHARED_PENDING: "shared_pending",
+  DEPENDENCY: "dependency",
+  CONTEXT_MISSING: "context_missing",
+} as const;
+export type BlockedReason = (typeof BlockedReason)[keyof typeof BlockedReason];

@@ -7,19 +7,26 @@ export interface ErrorResolutionContext {
   correction_count: number;
   max_corrections: number;    // 2
   is_final_attempt: boolean;  // true if this is the last attempt in the current loop
+  tier3_escalation?: boolean; // true if shared protocol signals Tier 3 upgrade
 }
 
-export type ErrorResolution = "retry" | "escalate" | "abort";
+export type ErrorResolution = "retry" | "escalate" | "abort" | "tier3_escalation";
 
 /**
  * Pure function: determine how to resolve an error.
  *
+ * - tier3_escalation flag → tier3_escalation (shared protocol triggered)
  * - retry_count < max_retries → retry
  * - correction_count >= max_corrections → escalate
  * - blocked with no resolution path → abort
  * - else (retries exhausted) → escalate
  */
 export function resolveError(ctx: ErrorResolutionContext): ErrorResolution {
+  // Tier 3 escalation takes priority
+  if (ctx.tier3_escalation) {
+    return "tier3_escalation";
+  }
+
   // Still have retries left
   if (ctx.retry_count < ctx.max_retries && !ctx.is_final_attempt) {
     return "retry";

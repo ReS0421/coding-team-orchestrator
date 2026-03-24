@@ -59,3 +59,21 @@ export interface ArtifactFile {
   body: string;
   raw: string;
 }
+
+// ─── ManifestLite (Sprint 3 — Tier 2 shared) ───────────
+// ManifestArtifact의 subset (control_state, submission_state, depends_on, submitted_by 제외)
+export interface ManifestLiteArtifact {
+  id: string;
+  family: ArtifactFamily;      // reference | control only (no submission)
+  path: string;
+  content_rev: number;
+  lifecycle?: Lifecycle;
+  freshness?: Freshness;
+}
+
+export interface ManifestLite {
+  manifest_lite_seq: number;
+  brief_id: string;
+  artifacts: ManifestLiteArtifact[];
+  bootstrap_from?: string;       // "manifest-lite" when upgraded to full
+}

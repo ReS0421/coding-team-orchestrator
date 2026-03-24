@@ -6,3 +6,4 @@ export * from "./planner-return.js";
 export * from "./reviewer-return.js";
 export * from "./lead-return.js";
 export * from "./brief.js";
+export * from "./event-log.js";

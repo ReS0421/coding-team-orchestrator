@@ -34,7 +34,7 @@ describe("ErrorLog - valid", () => {
     roles.forEach((r) => expect(() => validateErrorLog({ ...validEntry, role: r })).not.toThrow());
   });
   it("parses all resolution types", () => {
-    const resolutions = ["retry", "reassign", "escalate", "abort", "salvage"];
+    const resolutions = ["retry", "reassign", "escalate", "abort", "tier3_escalation"];
     resolutions.forEach((r) => expect(() => validateErrorLog({ ...validEntry, resolution: r })).not.toThrow());
   });
 });

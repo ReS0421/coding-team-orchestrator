@@ -4,6 +4,8 @@ import type { DispatchCard } from "../schemas/dispatch-card.js";
 import type { Brief } from "../schemas/brief.js";
 import { findArtifact } from "../store/manifest.js";
 import { judgeTier, type SharedSurface } from "./tier-judge.js";
+import { identifySharedOwner } from "./shared-protocol.js";
+import { selectActingLead, applyActingLeadToCards } from "./acting-lead.js";
 
 export interface TaskRequest {
   task: string;
@@ -27,6 +29,10 @@ export interface Tier2DispatchResult {
   planner_card?: DispatchCard;
   specialist_cards: DispatchCard[];
   reviewer_card: DispatchCard;
+  // Sprint 3 additions
+  acting_lead_id?: string;
+  has_shared: boolean;
+  manifest_lite_required: boolean;
 }
 
 // ─── Tier 1 (unchanged) ────────────────────────────────
@@ -96,6 +102,7 @@ export function evaluateDispatchRule(
 /**
  * Evaluate dispatch rules for Tier 2.
  * Generates one dispatch card per specialist + one reviewer card.
+ * When shared surfaces exist, applies shared protocol fields.
  */
 export function evaluateTier2DispatchRule(
   manifest: ProjectManifest,
@@ -104,44 +111,82 @@ export function evaluateTier2DispatchRule(
 ): Tier2DispatchResult {
   const needsPlanner = checkNeedsPlanner(manifest, request);
   const uid = randomUUID().slice(0, 8);
+  const hasShared = brief.shared.length > 0;
+
+  // Shared owner + acting lead
+  let sharedOwnerId: string | undefined;
+  let sharedPaths: string[] = [];
+  if (hasShared) {
+    const ownerInfo = identifySharedOwner(brief);
+    sharedOwnerId = ownerInfo.ownerId;
+    sharedPaths = ownerInfo.sharedPaths;
+  }
+  const leadDecision = selectActingLead(brief, sharedOwnerId);
+
+  // manifest-lite required: shared || acting_lead || 3 specialists
+  const manifest_lite_required =
+    hasShared ||
+    leadDecision.needs_acting_lead ||
+    brief.specialists.length >= 3;
 
   // Shared surface mapping from brief
-  const sharedSurfaces: { path: string; rule: string; owner: string }[] =
-    brief.shared.map((sharedPath) => {
-      // Find the specialist that owns this shared path (first match)
-      const owner = brief.specialists.find((s) =>
-        s.owns.includes(sharedPath),
-      );
-      return {
-        path: sharedPath,
-        rule: "tier2_shared_protocol",
-        owner: owner?.id ?? brief.specialists[0].id,
-      };
-    });
+  const sharedSurfaces: {
+    path: string;
+    rule: string;
+    owner: string;
+    controllable?: boolean;
+  }[] = brief.shared.map((sharedPath) => {
+    const owner = brief.specialists.find((s) => s.owns.includes(sharedPath));
+    return {
+      path: sharedPath,
+      rule: "tier2_shared_protocol",
+      owner: owner?.id ?? brief.specialists[0].id,
+      controllable: true,
+    };
+  });
 
   // Specialist cards — one per brief specialist
-  const specialist_cards: DispatchCard[] = brief.specialists.map((spec, idx) => ({
-    version: 1 as const,
-    dispatch_rev: 1,
-    role: "specialist" as const,
-    id: `${spec.id}-${uid}`,
-    tier: 2 as const,
-    task: `${request.task} — scope: ${spec.scope.join(", ")}`,
-    input_refs: request.input_refs ?? [],
-    entrypoint: [],
-    must_read: [],
-    authoritative_artifact: [],
-    write_scope: spec.scope,
-    ...(spec.owns.length > 0
-      ? {}
-      : {}),
-    ...(sharedSurfaces.length > 0
-      ? { shared_surface: sharedSurfaces }
-      : {}),
-    completion_check: brief.accept_checks,
-    return_format: { schema: "specialist_submission_v1" },
-    timeout_profile: { class: "standard" as const, heartbeat_required: false },
-  }));
+  let specialist_cards: DispatchCard[] = brief.specialists.map((spec) => {
+    const isOwner = hasShared && spec.id === sharedOwnerId;
+    const card: DispatchCard = {
+      version: 1 as const,
+      dispatch_rev: 1,
+      role: "specialist" as const,
+      id: `${spec.id}-${uid}`,
+      tier: 2 as const,
+      task: `${request.task} — scope: ${spec.scope.join(", ")}`,
+      input_refs: request.input_refs ?? [],
+      entrypoint: [],
+      must_read: [],
+      authoritative_artifact: [],
+      write_scope: spec.scope,
+      ...(sharedSurfaces.length > 0 ? { shared_surface: sharedSurfaces } : {}),
+      completion_check: brief.accept_checks,
+      return_format: { schema: "specialist_submission_v1" },
+      timeout_profile: {
+        class: "standard" as const,
+        heartbeat_required: false,
+      },
+      // Shared protocol fields
+      ...(isOwner
+        ? {
+            is_shared_owner: true,
+            spawn_order: 1,
+            priority_task: `Implement shared interface changes first: ${sharedPaths.join(", ")}`,
+          }
+        : {}),
+      ...(hasShared && !isOwner
+        ? {
+            selective_hold: true,
+            spawn_order: 2,
+          }
+        : {}),
+    };
+    return card;
+  });
+
+  // Apply acting lead to cards
+  specialist_cards = applyActingLeadToCards(specialist_cards, leadDecision);
 
   // Reviewer card
   const reviewer_card: DispatchCard = {
@@ -156,11 +201,7 @@ export function evaluateTier2DispatchRule(
     must_read: [],
     authoritative_artifact: [],
     write_scope: [],
-    completion_check: [
-      "spec check",
-      "quality check",
-      "cross check",
-    ],
+    completion_check: ["spec check", "quality check", "cross check"],
     return_format: { schema: "reviewer_return_v1" },
     timeout_profile: { class: "standard", heartbeat_required: false },
   };
@@ -191,12 +232,18 @@ export function evaluateTier2DispatchRule(
     planner_card,
     specialist_cards,
     reviewer_card,
+    acting_lead_id: leadDecision.acting_lead_id,
+    has_shared: hasShared,
+    manifest_lite_required,
   };
 }
 
 // ─── Shared helpers ─────────────────────────────────────
 
-function checkNeedsPlanner(manifest: ProjectManifest, request: TaskRequest): boolean {
+function checkNeedsPlanner(
+  manifest: ProjectManifest,
+  request: TaskRequest,
+): boolean {
   const tasksMd = findArtifact(manifest, "tasks_md");
   if (!tasksMd) return true;
   if (tasksMd.lifecycle !== "approved") return true;

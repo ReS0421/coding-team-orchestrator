@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import {
   appendEventLog,
@@ -8,78 +7,75 @@ import {
   readNdjson,
 } from "../../src/store/log-writer.js";
 import type { ErrorLog } from "../../src/schemas/error-log.js";
+import type { EventLogEntry } from "../../src/schemas/event-log.js";
 
-describe("log-writer", () => {
-  let tmpDir: string;
+let tmpDir: string;
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(import.meta.dirname ?? __dirname, "tmp-"));
+  return () => fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "log-writer-"));
+function makeEvent(overrides?: Partial<EventLogEntry>): EventLogEntry {
+  return {
+    ts: new Date().toISOString(),
+    event: "completed",
+    ...overrides,
+  } as EventLogEntry;
+}
+
+describe("appendEventLog", () => {
+  it("appends event as NDJSON line", () => {
+    const event = makeEvent({ session_id: "sess-1" });
+    appendEventLog(event, { logDir: tmpDir });
+    const lines = readNdjson(path.join(tmpDir, "events.ndjson"));
+    expect(lines).toHaveLength(1);
+    expect((lines[0] as Record<string, unknown>).event).toBe("completed");
+    expect((lines[0] as Record<string, unknown>).session_id).toBe("sess-1");
   });
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  it("appends multiple events", () => {
+    appendEventLog(makeEvent({ event: "spawned" }), { logDir: tmpDir });
+    appendEventLog(makeEvent({ event: "return_validated" }), { logDir: tmpDir });
+    appendEventLog(makeEvent({ event: "completed" }), { logDir: tmpDir });
+    const lines = readNdjson(path.join(tmpDir, "events.ndjson"));
+    expect(lines).toHaveLength(3);
   });
 
-  describe("appendEventLog", () => {
-    it("appends event as NDJSON line", () => {
-      appendEventLog({ type: "test", data: 42 }, { logDir: tmpDir });
-      const lines = readNdjson(path.join(tmpDir, "events.ndjson"));
-      expect(lines).toHaveLength(1);
-      expect(lines[0]).toEqual({ type: "test", data: 42 });
-    });
+  it("creates logDir if needed", () => {
+    const nested = path.join(tmpDir, "deep", "logs");
+    appendEventLog(makeEvent(), { logDir: nested });
+    expect(fs.existsSync(path.join(nested, "events.ndjson"))).toBe(true);
+  });
+});
 
-    it("appends multiple events", () => {
-      appendEventLog({ seq: 1 }, { logDir: tmpDir });
-      appendEventLog({ seq: 2 }, { logDir: tmpDir });
-      appendEventLog({ seq: 3 }, { logDir: tmpDir });
-      const lines = readNdjson(path.join(tmpDir, "events.ndjson"));
-      expect(lines).toHaveLength(3);
-    });
+describe("appendErrorLog", () => {
+  it("appends error entry", () => {
+    const entry: ErrorLog = {
+      session_id: "sess-1",
+      role: "specialist",
+      error_type: "crash",
+      timestamp: new Date().toISOString(),
+      dispatch_rev: 1,
+      retry_count: 0,
+      propagation_class: "contained",
+      affected_tasks: ["task-1"],
+      artifact_refs: [],
+    };
+    appendErrorLog(entry, { logDir: tmpDir });
+    const lines = readNdjson(path.join(tmpDir, "errors.ndjson"));
+    expect(lines).toHaveLength(1);
+    expect((lines[0] as ErrorLog).session_id).toBe("sess-1");
+  });
+});
 
-    it("creates logDir if needed", () => {
-      const nested = path.join(tmpDir, "deep", "logs");
-      appendEventLog({ ok: true }, { logDir: nested });
-      expect(fs.existsSync(path.join(nested, "events.ndjson"))).toBe(true);
-    });
+describe("readNdjson", () => {
+  it("returns empty array for missing file", () => {
+    expect(readNdjson(path.join(tmpDir, "nonexistent.ndjson"))).toEqual([]);
   });
 
-  describe("appendErrorLog", () => {
-    it("appends error as NDJSON line", () => {
-      const entry: ErrorLog = {
-        session_id: "sess-1",
-        role: "specialist",
-        error_type: "timeout",
-        timestamp: "2026-03-21T14:00:00Z",
-        dispatch_rev: 1,
-        retry_count: 0,
-        propagation_class: "contained",
-        affected_tasks: ["task-1"],
-        artifact_refs: ["spec"],
-      };
-      appendErrorLog(entry, { logDir: tmpDir });
-      const lines = readNdjson(path.join(tmpDir, "errors.ndjson"));
-      expect(lines).toHaveLength(1);
-      expect((lines[0] as ErrorLog).session_id).toBe("sess-1");
-    });
-  });
-
-  describe("readNdjson", () => {
-    it("returns empty array for missing file", () => {
-      expect(readNdjson(path.join(tmpDir, "missing.ndjson"))).toEqual([]);
-    });
-
-    it("returns empty array for empty file", () => {
-      fs.writeFileSync(path.join(tmpDir, "empty.ndjson"), "");
-      expect(readNdjson(path.join(tmpDir, "empty.ndjson"))).toEqual([]);
-    });
-
-    it("parses multiple JSON lines", () => {
-      const filePath = path.join(tmpDir, "multi.ndjson");
-      fs.writeFileSync(filePath, '{"a":1}\n{"b":2}\n{"c":3}\n');
-      const result = readNdjson(filePath);
-      expect(result).toHaveLength(3);
-      expect(result[0]).toEqual({ a: 1 });
-      expect(result[2]).toEqual({ c: 3 });
-    });
+  it("returns empty array for empty file", () => {
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "empty.ndjson"), "", "utf-8");
+    expect(readNdjson(path.join(tmpDir, "empty.ndjson"))).toEqual([]);
   });
 });

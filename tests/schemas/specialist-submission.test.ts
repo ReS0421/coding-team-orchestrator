@@ -63,3 +63,55 @@ describe("SpecialistSubmissionSchema", () => {
     expect(result.success).toBe(false);
   });
 });
+
+// ─── Sprint 3: BlockedOn schema ────────────────────────
+
+describe("BlockedOn - shared_pending", () => {
+  it("accepts shared_pending with surface and owner_id", () => {
+    const submission = {
+      ...validSubmission,
+      status: "blocked",
+      blocked_on: {
+        reason: "shared_pending",
+        surface: "src/types/auth.ts",
+        owner_id: "specialist-1",
+      },
+    };
+    expect(SpecialistSubmissionSchema.safeParse(submission).success).toBe(true);
+  });
+
+  it("rejects shared_pending without surface", () => {
+    const submission = {
+      ...validSubmission,
+      status: "blocked",
+      blocked_on: {
+        reason: "shared_pending",
+        owner_id: "specialist-1",
+      },
+    };
+    expect(SpecialistSubmissionSchema.safeParse(submission).success).toBe(false);
+  });
+
+  it("rejects shared_pending without owner_id", () => {
+    const submission = {
+      ...validSubmission,
+      status: "blocked",
+      blocked_on: {
+        reason: "shared_pending",
+        surface: "src/types/auth.ts",
+      },
+    };
+    expect(SpecialistSubmissionSchema.safeParse(submission).success).toBe(false);
+  });
+
+  it("accepts dependency without surface (optional)", () => {
+    const submission = {
+      ...validSubmission,
+      status: "blocked",
+      blocked_on: {
+        reason: "dependency",
+      },
+    };
+    expect(SpecialistSubmissionSchema.safeParse(submission).success).toBe(true);
+  });
+});

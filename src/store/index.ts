@@ -6,3 +6,4 @@ export * from "./freshness.js";
 export * from "./patch-engine.js";
 export * from "./checkpoint.js";
 export * from "./log-writer.js";
+export * from "./manifest-lite.js";

@@ -68,3 +68,66 @@ describe("DispatchCard - invalid", () => {
     expect(() => validateDispatchCard({ ...validCard, entrypoint: "single" })).toThrow();
   });
 });
+
+// ─── Sprint 3: shared protocol fields ──────────────────
+
+describe("DispatchCard - shared protocol fields", () => {
+  it("accepts controllable in shared_surface", () => {
+    const card = {
+      ...validCard,
+      shared_surface: [
+        { path: "src/types/auth.ts", rule: "tier2_shared_protocol", owner: "specialist-1", controllable: true },
+      ],
+    };
+    const result = validateDispatchCard(card);
+    expect(result.shared_surface![0].controllable).toBe(true);
+  });
+
+  it("accepts controllable=false in shared_surface", () => {
+    const card = {
+      ...validCard,
+      shared_surface: [
+        { path: "src/types/auth.ts", rule: "tier2_shared_protocol", owner: "specialist-1", controllable: false },
+      ],
+    };
+    const result = validateDispatchCard(card);
+    expect(result.shared_surface![0].controllable).toBe(false);
+  });
+
+  it("controllable defaults to undefined (optional)", () => {
+    const card = {
+      ...validCard,
+      shared_surface: [
+        { path: "src/types/auth.ts", rule: "tier2_shared_protocol", owner: "specialist-1" },
+      ],
+    };
+    const result = validateDispatchCard(card);
+    expect(result.shared_surface![0].controllable).toBeUndefined();
+  });
+
+  it("accepts priority_task, selective_hold, spawn_order", () => {
+    const card = {
+      ...validCard,
+      priority_task: "Implement shared interface changes first: src/types/auth.ts",
+      selective_hold: true,
+      spawn_order: 2,
+    };
+    const result = validateDispatchCard(card);
+    expect(result.priority_task).toContain("shared interface");
+    expect(result.selective_hold).toBe(true);
+    expect(result.spawn_order).toBe(2);
+  });
+
+  it("accepts is_acting_lead and is_shared_owner on specialist", () => {
+    const card = {
+      ...validCard,
+      role: "specialist",
+      is_acting_lead: true,
+      is_shared_owner: true,
+    };
+    const result = validateDispatchCard(card);
+    expect(result.is_acting_lead).toBe(true);
+    expect(result.is_shared_owner).toBe(true);
+    expect(result.role).toBe("specialist");
+  });
+});
