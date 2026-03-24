@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { runTier1, type OrchestratorConfig } from "../../src/engine/orchestrator.js";
+import { runTier1, runTier2, type OrchestratorConfig } from "../../src/engine/orchestrator.js";
+import type { Brief } from "../../src/schemas/brief.js";
 import type { TaskRequest } from "../../src/engine/dispatch-rule.js";
 import type { RunnerFn } from "../../src/runners/types.js";
 import { fakeRunner } from "../helpers/fake-runner.js";
@@ -174,4 +175,147 @@ describe("runTier1", () => {
     expect(errors[0].role).toBe("planner");
   });
 
+});
+
+// ─── Sprint 3: runTier2 shared path tests ──────────────
+
+import { createStatefulRunner } from "../helpers/fake-runner.js";
+
+describe("runTier2 — shared path", () => {
+  it("enters shared branch when brief has shared surfaces", async () => {
+    const runner = createStatefulRunner() as RunnerFn;
+    const brief: Brief = {
+      brief_id: "test-shared",
+      goal: "Test shared",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: ["src/api/routes.ts"] },
+      ],
+      shared: ["src/types/auth.ts"],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+
+    const result = await runTier2(
+      { projectRoot: tmpDir, logDir: tmpDir, runner },
+      {
+        task: "test shared",
+        write_scope: ["src/auth/", "src/api/"],
+        brief,
+        shared_surfaces: [{ path: "src/types/auth.ts", rule: "tier2_shared_protocol", owner: "specialist-1" }],
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.acting_lead_id).toBe("specialist-1");
+    expect(result.shared_changes).toBe(0);
+    expect(result.tier3_escalation).toBe(false);
+  });
+
+  it("creates manifest-lite when shared path", async () => {
+    const runner = createStatefulRunner() as RunnerFn;
+    const brief: Brief = {
+      brief_id: "test-manifest-lite",
+      goal: "Test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: [] },
+      ],
+      shared: ["src/types/auth.ts"],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+
+    await runTier2(
+      { projectRoot: tmpDir, logDir: tmpDir, runner },
+      {
+        task: "test",
+        write_scope: ["src/auth/", "src/api/"],
+        brief,
+        shared_surfaces: [{ path: "src/types/auth.ts", rule: "tier2_shared_protocol", owner: "specialist-1" }],
+      },
+    );
+
+    expect(fs.existsSync(path.join(tmpDir, "artifacts", "manifest-lite.yaml"))).toBe(true);
+  });
+
+  it("shared-free path still works (no regression)", async () => {
+    const runner = createStatefulRunner() as RunnerFn;
+    const brief: Brief = {
+      brief_id: "test-no-shared",
+      goal: "Test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/auth/refresh.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: ["src/api/routes.ts"] },
+      ],
+      shared: [],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+
+    const result = await runTier2(
+      { projectRoot: tmpDir, logDir: tmpDir, runner },
+      { task: "test", write_scope: ["src/auth/", "src/api/"], brief },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.shared_changes).toBe(0);
+    expect(result.acting_lead_id).toBeUndefined();
+    expect(result.tier3_escalation).toBe(false);
+  });
+
+  it("returns tier3_escalation when shared execution escalates", async () => {
+    let calls = 0;
+    const runner: RunnerFn = async (card) => {
+      calls++;
+      if (card.role === "planner") return { tasks_md: "# tasks" };
+      if (card.role === "reviewer") return {
+        review_report: "ok", disposition_recommendation: "PASS" as const, issues: [],
+      };
+      // Specialist: owner succeeds, consumer always blocked
+      if (card.is_shared_owner) return {
+        status: "done" as const,
+        touched_files: ["src/types/auth.ts"],
+        changeset: "abc", delta_stub: "diff",
+        evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+      };
+      // Consumer blocked
+      return {
+        status: "blocked" as const,
+        touched_files: [],
+        changeset: "x", delta_stub: "x",
+        evidence: { build_pass: false, test_pass: false, test_summary: "blocked" },
+        blocked_on: { reason: "shared_pending" as const, surface: "src/types/auth.ts", owner_id: "specialist-1" },
+      };
+    };
+
+    const brief: Brief = {
+      brief_id: "test-escalation",
+      goal: "Test",
+      out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: ["src/types/auth.ts"] },
+        { id: "specialist-2", scope: ["src/api/"], owns: [] },
+      ],
+      shared: ["src/types/auth.ts"],
+      accept_checks: ["build"],
+      escalate_if: [],
+    };
+
+    const result = await runTier2(
+      { projectRoot: tmpDir, logDir: tmpDir, runner },
+      {
+        task: "test",
+        write_scope: ["src/auth/", "src/api/"],
+        brief,
+        shared_surfaces: [{ path: "src/types/auth.ts", rule: "tier2_shared_protocol", owner: "specialist-1" }],
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.tier3_escalation).toBe(true);
+  });
 });

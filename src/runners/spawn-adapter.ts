@@ -170,49 +170,37 @@ export async function runSharedExecution(
     options.onOwnerComplete(ownerResults);
   }
 
-  // ── Step 2: Run consumer cards ──
+  // ── Step 2: Run consumer cards (with blocked-retry loop) ──
   let consumerResults = await runParallel(
     options.consumerCards,
     options.runner,
   );
 
-  // Check for BLOCKED consumers
-  for (const settled of consumerResults.settled) {
-    if (settled.status !== "fulfilled" || !settled.value) continue;
+  // Re-check loop: after redispatch/retry, consumers may still be blocked
+  let consumerCheckNeeded = true;
+  while (consumerCheckNeeded) {
+    consumerCheckNeeded = false;
 
-    const submission = settled.value as SpecialistSubmission;
-    if (submission.status !== "blocked") continue;
+    for (const settled of consumerResults.settled) {
+      if (settled.status !== "fulfilled" || !settled.value) continue;
 
-    // Consumer is BLOCKED
-    const blockedOn = (submission as SpecialistSubmission & { blocked_on?: BlockedOn }).blocked_on;
-    const context: BlockedContext = {
-      card: options.consumerCards.find((c) => c.id === settled.id)!,
-      submission,
-      blocked_on: blockedOn,
-      shared_change_count: sharedChanges,
-    };
+      const submission = settled.value as SpecialistSubmission;
+      if (submission.status !== "blocked") continue;
 
-    if (!options.onConsumerBlocked) continue;
-
-    const action = options.onConsumerBlocked(settled, context);
-
-    if (action === "escalate_tier3") {
-      return {
-        owner_results: ownerResults,
-        consumer_results: consumerResults,
-        all_succeeded: false,
-        failed_ids: [settled.id],
-        shared_changes: sharedChanges,
-        tier3_escalation: true,
-        redispatch_count: redispatchCount,
+      // Consumer is BLOCKED
+      const blockedOn = (submission as SpecialistSubmission & { blocked_on?: BlockedOn }).blocked_on;
+      const context: BlockedContext = {
+        card: options.consumerCards.find((c) => c.id === settled.id)!,
+        submission,
+        blocked_on: blockedOn,
+        shared_change_count: sharedChanges,
       };
-    }
 
-    if (action === "redispatch_owner") {
-      redispatchCount++;
-      sharedChanges++;
+      if (!options.onConsumerBlocked) continue;
 
-      if (redispatchCount > maxRedispatch) {
+      const action = options.onConsumerBlocked(settled, context);
+
+      if (action === "escalate_tier3") {
         return {
           owner_results: ownerResults,
           consumer_results: consumerResults,
@@ -224,34 +212,53 @@ export async function runSharedExecution(
         };
       }
 
-      // Re-run owner with incremented dispatch_rev
-      const redispatchCards = options.ownerCards.map((c) => ({
-        ...c,
-        dispatch_rev: c.dispatch_rev + redispatchCount,
-      }));
-      ownerResults = await runParallel(redispatchCards, options.runner);
+      if (action === "redispatch_owner") {
+        redispatchCount++;
+        sharedChanges++;
 
-      // Re-run consumer
-      consumerResults = await runParallel(
-        options.consumerCards,
-        options.runner,
-      );
-    }
+        if (redispatchCount > maxRedispatch) {
+          return {
+            owner_results: ownerResults,
+            consumer_results: consumerResults,
+            all_succeeded: false,
+            failed_ids: [settled.id],
+            shared_changes: sharedChanges,
+            tier3_escalation: true,
+            redispatch_count: redispatchCount,
+          };
+        }
 
-    if (action === "retry") {
-      // Re-run just this consumer
-      const retryCard = options.consumerCards.find(
-        (c) => c.id === settled.id,
-      );
-      if (retryCard) {
-        const retryResult = await runParallel([retryCard], options.runner);
-        // Merge
-        consumerResults = {
-          ...consumerResults,
-          settled: consumerResults.settled.map((s) =>
-            s.id === settled.id ? retryResult.settled[0] : s,
-          ),
-        };
+        // Re-run owner with incremented dispatch_rev
+        const redispatchCards = options.ownerCards.map((c) => ({
+          ...c,
+          dispatch_rev: c.dispatch_rev + redispatchCount,
+        }));
+        ownerResults = await runParallel(redispatchCards, options.runner);
+
+        // Re-run consumers and re-check
+        consumerResults = await runParallel(
+          options.consumerCards,
+          options.runner,
+        );
+        consumerCheckNeeded = true;
+        break; // restart the for loop with new results
+      }
+
+      if (action === "retry") {
+        const retryCard = options.consumerCards.find(
+          (c) => c.id === settled.id,
+        );
+        if (retryCard) {
+          const retryResult = await runParallel([retryCard], options.runner);
+          consumerResults = {
+            ...consumerResults,
+            settled: consumerResults.settled.map((s) =>
+              s.id === settled.id ? retryResult.settled[0] : s,
+            ),
+          };
+          consumerCheckNeeded = true;
+          break; // restart check with updated results
+        }
       }
     }
   }
