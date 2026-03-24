@@ -34,6 +34,51 @@ function defaultSpecialist(card: DispatchCard, opts?: RunnerOptions): Specialist
   };
 }
 
+// Sprint 3: shared-aware specialist tracking
+const sharedCallCounts = new Map<string, number>();
+
+function sharedSpecialist(card: DispatchCard, opts?: RunnerOptions): SpecialistSubmission {
+  const sb = opts?.sharedBehavior;
+  if (!sb) return defaultSpecialist(card, opts);
+
+  // Owner behavior
+  if (card.is_shared_owner) {
+    if (!sb.ownerCommitSuccess) {
+      throw new Error("Owner crash: " + card.id);
+    }
+    const sub = defaultSpecialist(card, opts);
+    if (sb.sharedAmendmentFlag) {
+      return { ...sub, shared_amendment_flag: true };
+    }
+    return sub;
+  }
+
+  // Consumer behavior
+  if (sb.consumerBlockedOnShared) {
+    const key = card.id;
+    const count = (sharedCallCounts.get(key) ?? 0) + 1;
+    sharedCallCounts.set(key, count);
+
+    // First N calls blocked, then done
+    if (count <= sb.consumerBlockedCount) {
+      const surface = sb.undiscoveredShared.length > 0
+        ? sb.undiscoveredShared[0]
+        : card.shared_surface?.[0]?.path ?? "unknown";
+      const ownerId = card.shared_surface?.[0]?.owner ?? "unknown";
+      return {
+        status: "blocked",
+        touched_files: [],
+        changeset: "blocked",
+        delta_stub: "blocked",
+        evidence: { build_pass: false, test_pass: false, test_summary: "blocked on shared" },
+        blocked_on: { reason: "shared_pending", surface, owner_id: ownerId },
+      };
+    }
+  }
+
+  return defaultSpecialist(card, opts);
+}
+
 function defaultPlanner(card: DispatchCard): PlannerReturn {
   return {
     tasks_md: "tasks.md",
@@ -107,7 +152,7 @@ export const fakeRunner: TestRunnerFn = async (
       return defaultPlanner(card);
     case "specialist":
     case "shared_owner":
-      return defaultSpecialist(card, opts);
+      return opts?.sharedBehavior ? sharedSpecialist(card, opts) : defaultSpecialist(card, opts);
     case "reviewer":
       return defaultReviewer(card, opts);
     case "execution_lead":
@@ -136,7 +181,7 @@ export function createStatefulRunner(opts?: RunnerOptions): TestRunnerFn {
         return defaultPlanner(card);
       case "specialist":
       case "shared_owner":
-        return defaultSpecialist(card, mergedOpts);
+        return mergedOpts?.sharedBehavior ? sharedSpecialist(card, mergedOpts) : defaultSpecialist(card, mergedOpts);
       case "reviewer": {
         reviewerCallCount++;
         const behavior = mergedOpts?.correctionBehavior ?? "always_pass";

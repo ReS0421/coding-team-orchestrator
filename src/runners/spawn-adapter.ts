@@ -116,11 +116,11 @@ export async function runSharedExecution(
   if (!ownerResults.all_succeeded) {
     const resolution = resolveError({
       error_type: "crash",
-      retry_count: 1,
+      retry_count: 0,
       max_retries: maxRetries,
       correction_count: 0,
       max_corrections: 2,
-      is_final_attempt: true,
+      is_final_attempt: false,
     });
 
     if (resolution === "retry") {

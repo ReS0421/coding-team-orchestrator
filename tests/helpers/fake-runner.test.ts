@@ -96,3 +96,85 @@ describe("fakeRunner", () => {
     expect(sub.touched_files).toEqual(["a.ts", "b.ts"]);
   });
 });
+
+// ─── Sprint 3: shared behavior ─────────────────────────
+
+import type { DispatchCard } from "../../src/schemas/dispatch-card.js";
+import type { SpecialistSubmission } from "../../src/schemas/specialist-submission.js";
+
+function makeSharedCard(id: string, isOwner: boolean): DispatchCard {
+  return {
+    version: 1, dispatch_rev: 1, role: "specialist", id, tier: 2,
+    task: "test", input_refs: [], entrypoint: [], must_read: [],
+    authoritative_artifact: [], write_scope: ["src/"],
+    completion_check: [], return_format: { schema: "specialist_submission_v1" },
+    timeout_profile: { class: "standard", heartbeat_required: false },
+    is_shared_owner: isOwner || undefined,
+    shared_surface: [{ path: "src/shared.ts", rule: "tier2", owner: "owner-1" }],
+  };
+}
+
+describe("fakeRunner — shared behavior", () => {
+  it("owner succeeds with shared_amendment_flag", async () => {
+    const result = await fakeRunner(makeSharedCard("owner-1", true), {
+      sharedBehavior: {
+        ownerCommitSuccess: true,
+        consumerBlockedOnShared: false,
+        consumerBlockedCount: 0,
+        sharedAmendmentFlag: true,
+        undiscoveredShared: [],
+      },
+    });
+    expect((result as SpecialistSubmission).status).toBe("done");
+    expect((result as SpecialistSubmission).shared_amendment_flag).toBe(true);
+  });
+
+  it("owner crashes when ownerCommitSuccess=false", async () => {
+    await expect(fakeRunner(makeSharedCard("owner-1", true), {
+      sharedBehavior: {
+        ownerCommitSuccess: false,
+        consumerBlockedOnShared: false,
+        consumerBlockedCount: 0,
+        sharedAmendmentFlag: false,
+        undiscoveredShared: [],
+      },
+    })).rejects.toThrow("Owner crash");
+  });
+
+  it("consumer returns blocked then done on re-call", async () => {
+    const card = makeSharedCard("consumer-1", false);
+    const opts = {
+      sharedBehavior: {
+        ownerCommitSuccess: true,
+        consumerBlockedOnShared: true,
+        consumerBlockedCount: 1,
+        sharedAmendmentFlag: false,
+        undiscoveredShared: [],
+      },
+    };
+
+    // First call: blocked
+    const r1 = await fakeRunner(card, opts) as SpecialistSubmission;
+    expect(r1.status).toBe("blocked");
+    expect(r1.blocked_on?.reason).toBe("shared_pending");
+
+    // Second call: done
+    const r2 = await fakeRunner(card, opts) as SpecialistSubmission;
+    expect(r2.status).toBe("done");
+  });
+
+  it("consumer uses undiscovered shared surface", async () => {
+    const card = makeSharedCard("consumer-2", false);
+    const result = await fakeRunner(card, {
+      sharedBehavior: {
+        ownerCommitSuccess: true,
+        consumerBlockedOnShared: true,
+        consumerBlockedCount: 1,
+        sharedAmendmentFlag: false,
+        undiscoveredShared: ["src/new-shared.ts"],
+      },
+    }) as SpecialistSubmission;
+    expect(result.status).toBe("blocked");
+    expect(result.blocked_on?.surface).toBe("src/new-shared.ts");
+  });
+});

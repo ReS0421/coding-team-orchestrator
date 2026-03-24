@@ -6,6 +6,14 @@ import type { RunnerReturn } from "../../src/runners/types.js";
 
 // ─── Test-specific runner types ─────────────────────────
 
+export interface SharedBehavior {
+  ownerCommitSuccess: boolean;
+  consumerBlockedOnShared: boolean;
+  consumerBlockedCount: number;
+  sharedAmendmentFlag: boolean;
+  undiscoveredShared: string[];
+}
+
 export interface RunnerOptions {
   statusOverride?: SpecialistSubmission["status"];
   evidenceOverride?: Partial<{
@@ -17,6 +25,8 @@ export interface RunnerOptions {
   crossCheckOverride?: CrossCheckEntry[];
   correctionBehavior?: "fail_then_pass" | "always_fail" | "always_pass";
   delayMs?: number;
+  // Sprint 3: shared behavior
+  sharedBehavior?: SharedBehavior;
 }
 
 /**
