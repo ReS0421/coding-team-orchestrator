@@ -55,6 +55,27 @@ describe("manifest", () => {
       expect(loaded.artifacts[0].freshness).toBe("fresh");
     });
 
+    // ── Task 4.2: loadManifest YAML null guard ──
+    it("throws on empty file", () => {
+      fs.writeFileSync(path.join(tmpDir, "project-manifest.yaml"), "");
+      expect(() => loadManifest(tmpDir)).toThrow("Invalid manifest");
+    });
+
+    it("throws on number YAML", () => {
+      fs.writeFileSync(path.join(tmpDir, "project-manifest.yaml"), "42\n");
+      expect(() => loadManifest(tmpDir)).toThrow("Invalid manifest");
+    });
+
+    it("throws on string YAML", () => {
+      fs.writeFileSync(path.join(tmpDir, "project-manifest.yaml"), "hello world\n");
+      expect(() => loadManifest(tmpDir)).toThrow("Invalid manifest");
+    });
+
+    it("throws on null YAML", () => {
+      fs.writeFileSync(path.join(tmpDir, "project-manifest.yaml"), "null\n");
+      expect(() => loadManifest(tmpDir)).toThrow("Invalid manifest");
+    });
+
     it("loads manifest with missing optional arrays", () => {
       const yamlContent = "project: minimal\nmanifest_seq: 0\n";
       fs.writeFileSync(path.join(tmpDir, "project-manifest.yaml"), yamlContent);

@@ -24,13 +24,17 @@ export function createEmptyManifest(project: string): ProjectManifest {
 export function loadManifest(projectRoot: string): ProjectManifest {
   const fullPath = path.resolve(projectRoot, MANIFEST_FILE);
   const raw = fs.readFileSync(fullPath, "utf-8");
-  const data = yaml.load(raw) as ProjectManifest;
+  const data = yaml.load(raw);
+  if (!data || typeof data !== "object") {
+    throw new Error(`Invalid manifest at ${fullPath}: expected YAML object, got ${typeof data}`);
+  }
+  const manifest = data as ProjectManifest;
   return {
-    project: data.project,
-    manifest_seq: data.manifest_seq,
-    artifacts: data.artifacts ?? [],
-    transitions: data.transitions ?? [],
-    checkpoints: data.checkpoints ?? [],
+    project: manifest.project,
+    manifest_seq: manifest.manifest_seq,
+    artifacts: manifest.artifacts ?? [],
+    transitions: manifest.transitions ?? [],
+    checkpoints: manifest.checkpoints ?? [],
   };
 }
 
