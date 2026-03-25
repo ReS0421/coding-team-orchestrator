@@ -14,7 +14,7 @@ import {
 } from "../store/manifest.js";
 import { buildPatchSetFromSubmission, buildCombinedPatchSet } from "./patch-builder.js";
 import { applyPatchSetFull } from "../store/patch-engine.js";
-import { createCheckpointForPhase, findCheckpointByPhase } from "../store/checkpoint.js";
+import { createCheckpointForPhase, findCheckpointByPhase, restoreFromCheckpoint } from "../store/checkpoint.js";
 import { appendEventLog, appendErrorLog } from "../store/log-writer.js";
 import type { EventLogEntry } from "../schemas/event-log.js";
 import { evaluateDispatchRule, type TaskRequest } from "./dispatch-rule.js";
@@ -330,6 +330,9 @@ export interface Tier2Result {
   acting_lead_id?: string;
   tier3_escalation?: boolean;
   manifest_lite_seq?: number;
+  // Sprint 4: manifest integration
+  final_manifest_seq?: number;
+  checkpoints_created?: string[];
 }
 
 
@@ -433,6 +436,12 @@ export async function runTier2(
       };
     }
   }
+
+  // ── Checkpoint: cp-execution (after planning success) ──
+  const checkpointsCreated: string[] = [];
+  manifest = createCheckpointForPhase(manifest, "execution");
+  checkpointsCreated.push("cp-execution");
+  saveManifest(config.projectRoot, manifest);
 
   // ── Phase 2: EXECUTION (3-branch) ──
   let specialistResults: ParallelResult = emptyParallel;
@@ -633,6 +642,29 @@ export async function runTier2(
     }
   }
 
+  // ── Task 4.11: Combined specialist commit ──
+  {
+    const allSubmissions: import("../schemas/specialist-submission.js").SpecialistSubmission[] = [];
+    for (const s of specialistResults.settled) {
+      if (s.status === "fulfilled" && s.value) {
+        const v = safeValidateSpecialistSubmission(s.value);
+        if (v.success) allSubmissions.push(v.data);
+      }
+    }
+    const combinedPatchSet = buildCombinedPatchSet(allSubmissions, manifest);
+    if (combinedPatchSet) {
+      const fullResult = applyPatchSetFull(manifest, combinedPatchSet);
+      if (fullResult.success) {
+        manifest = fullResult.manifest;
+      }
+    }
+  }
+
+  // ── Checkpoint: cp-review (after all specialists succeed) ──
+  manifest = createCheckpointForPhase(manifest, "review");
+  checkpointsCreated.push("cp-review");
+  saveManifest(config.projectRoot, manifest);
+
   // ── Phase 3 + Correction Loop ──
   let correctionCount = 0;
   let currentReviewerCard = reviewer_card;
@@ -682,6 +714,12 @@ export async function runTier2(
         { ts: new Date().toISOString(), event: "completed", session_id: sessionId, task: request.task } as EventLogEntry,
         { logDir: config.logDir },
       );
+
+      // ── Checkpoint: cp-done (reviewer PASS) ──
+      manifest = createCheckpointForPhase(manifest, "done");
+      checkpointsCreated.push("cp-done");
+      saveManifest(config.projectRoot, manifest);
+
       return {
         success: true,
         tier: 2,
@@ -694,6 +732,8 @@ export async function runTier2(
         acting_lead_id: leadDecision.acting_lead_id,
         tier3_escalation: false,
         manifest_lite_seq: manifestLiteSeq,
+        final_manifest_seq: manifest.manifest_seq,
+        checkpoints_created: checkpointsCreated,
       };
     }
 
@@ -722,6 +762,12 @@ export async function runTier2(
     });
 
     if (correction.disposition === "escalate") {
+      // ── Task 4.12: Escalation rollback ──
+      const execCp = findCheckpointByPhase(manifest, "execution");
+      if (execCp) {
+        manifest = restoreFromCheckpoint(manifest, execCp.checkpoint_id, "escalation rollback");
+        saveManifest(config.projectRoot, manifest);
+      }
       return {
         success: false,
         tier: 2,
@@ -735,6 +781,8 @@ export async function runTier2(
         acting_lead_id: leadDecision.acting_lead_id,
         tier3_escalation: false,
         manifest_lite_seq: manifestLiteSeq,
+        final_manifest_seq: manifest.manifest_seq,
+        checkpoints_created: checkpointsCreated,
       };
     }
 
@@ -774,17 +822,24 @@ export async function runTier2(
         acting_lead_id: leadDecision.acting_lead_id,
         tier3_escalation: false,
         manifest_lite_seq: manifestLiteSeq,
+        final_manifest_seq: manifest.manifest_seq,
+        checkpoints_created: checkpointsCreated,
       };
     }
 
-    // Re-execute failed specialists
+    // ── Task 4.12: Correction rollback → re-execute → re-commit ──
+    // 1. Rollback to execution checkpoint
+    const execCpForCorrection = findCheckpointByPhase(manifest, "execution");
+    if (execCpForCorrection) {
+      manifest = restoreFromCheckpoint(manifest, execCpForCorrection.checkpoint_id, "correction rollback");
+    }
+
+    // 2. Re-execute correction specialists
     {
       const correctionResults = await runParallel(correction.re_dispatch_cards, config.runner);
 
       // Update specialist results with correction results
-      const correctionMap = new Map(correctionResults.settled.map((s) => [s.id, s]));
       for (const cs of correctionResults.settled) {
-        // Add or replace in settled
         const existingIdx = specialistResults.settled.findIndex((s) => s.id === cs.id);
         if (existingIdx >= 0) {
           specialistResults.settled[existingIdx] = cs;
@@ -792,9 +847,27 @@ export async function runTier2(
           specialistResults.settled.push(cs);
         }
       }
-      // Recalculate
       specialistResults.all_succeeded = specialistResults.settled.every((s) => s.status === "fulfilled");
       specialistResults.failed_ids = specialistResults.settled.filter((s) => s.status === "rejected").map((s) => s.id);
+    }
+
+    // 3. Re-commit ALL submissions (existing success + correction results)
+    {
+      const allSubmissions: import("../schemas/specialist-submission.js").SpecialistSubmission[] = [];
+      for (const s of specialistResults.settled) {
+        if (s.status === "fulfilled" && s.value) {
+          const v = safeValidateSpecialistSubmission(s.value);
+          if (v.success) allSubmissions.push(v.data);
+        }
+      }
+      const combinedPatchSet = buildCombinedPatchSet(allSubmissions, manifest);
+      if (combinedPatchSet) {
+        const fullResult = applyPatchSetFull(manifest, combinedPatchSet);
+        if (fullResult.success) {
+          manifest = fullResult.manifest;
+        }
+      }
+      saveManifest(config.projectRoot, manifest);
     }
 
     // Update reviewer card for next round
