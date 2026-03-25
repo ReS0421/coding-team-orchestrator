@@ -5,3 +5,4 @@ export * from "./correction.js";
 export * from "./error-resolution.js";
 export * from "./shared-protocol.js";
 export * from "./acting-lead.js";
+export * from "./patch-builder.js";
