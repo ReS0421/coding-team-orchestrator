@@ -12,6 +12,9 @@ import {
   loadManifest,
   saveManifest,
 } from "../store/manifest.js";
+import { buildPatchSetFromSubmission, buildCombinedPatchSet } from "./patch-builder.js";
+import { applyPatchSetFull } from "../store/patch-engine.js";
+import { createCheckpointForPhase, findCheckpointByPhase } from "../store/checkpoint.js";
 import { appendEventLog, appendErrorLog } from "../store/log-writer.js";
 import type { EventLogEntry } from "../schemas/event-log.js";
 import { evaluateDispatchRule, type TaskRequest } from "./dispatch-rule.js";
@@ -32,6 +35,7 @@ export interface OrchestratorResult {
   planner_result?: PlannerReturn;
   retry_count: number;
   error?: string;
+  final_manifest_seq?: number;
 }
 
 const MANIFEST_FILE = "project-manifest.yaml";
@@ -207,6 +211,17 @@ export async function runTier1(
         { logDir: config.logDir },
       );
 
+      // ── MANIFEST INTEGRATION ──
+      const patchSet = buildPatchSetFromSubmission(submission, manifest);
+      if (patchSet) {
+        const fullResult = applyPatchSetFull(manifest, patchSet);
+        if (fullResult.success) {
+          manifest = fullResult.manifest;
+        }
+      }
+      manifest = createCheckpointForPhase(manifest, "done");
+      saveManifest(config.projectRoot, manifest);
+
       return {
         success: true,
         tier,
@@ -214,6 +229,7 @@ export async function runTier1(
         specialist_result: specialistResult,
         planner_result: plannerResult,
         retry_count: retryCount,
+        final_manifest_seq: manifest.manifest_seq,
       };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
