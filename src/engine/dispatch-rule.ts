@@ -45,7 +45,7 @@ export function evaluateDispatchRule(
   request: TaskRequest,
 ): DispatchRuleResult {
   const needsPlanner = checkNeedsPlanner(manifest, request);
-  const tier = judgeTier({
+  const { tier } = judgeTier({
     write_scope: request.write_scope,
     shared_surfaces: request.shared_surfaces,
   });

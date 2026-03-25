@@ -5,6 +5,18 @@ import type { SharedChangeType } from "../domain/types.js";
 
 // ─── Types ──────────────────────────────────────────────
 
+
+/** Configurable thresholds for shared change escalation */
+export interface SharedEscalationThresholds {
+  maxSharedChanges: number;    // default 2
+  maxConsumerBlocked: number;  // default 2
+}
+
+const DEFAULT_THRESHOLDS: SharedEscalationThresholds = {
+  maxSharedChanges: 2,
+  maxConsumerBlocked: 2,
+};
+
 export interface ExecutionSequence {
   ownerIds: string[];
   consumerIds: string[];
@@ -99,6 +111,10 @@ export function buildExecutionSequence(brief: Brief): ExecutionSequence {
  * Evaluate a specialist submission for shared surface changes.
  * Consumes shared_amendment_flag and blocked_on.
  */
+/**
+ * Evaluate a specialist submission for shared surface changes.
+ * @param _brief Reserved for future: scope-aware severity (e.g., critical shared vs peripheral).
+ */
 export function evaluateSharedChange(
   submission: SpecialistSubmission,
   _brief: Brief,
@@ -150,15 +166,14 @@ export function evaluateSharedChange(
  */
 export function checkTier3EscalationTriggers(
   history: SharedChangeHistory,
+  thresholds: SharedEscalationThresholds = DEFAULT_THRESHOLDS,
 ): boolean {
-  // Shared changes >= 2
-  if (history.total_shared_changes >= 2) return true;
+  if (history.total_shared_changes >= thresholds.maxSharedChanges) return true;
 
   // Undiscovered shared surfaces found
   if (history.undiscovered_shared_surfaces.length > 0) return true;
 
-  // Consumer blocked on shared >= 2 times
-  if (history.consumer_blocked_count >= 2) return true;
+  if (history.consumer_blocked_count >= thresholds.maxConsumerBlocked) return true;
 
   return false;
 }
@@ -173,6 +188,8 @@ export function handleUnexpectedSharedChange(
   submission: SpecialistSubmission,
   brief: Brief,
   history: SharedChangeHistory,
+  currentDispatchRev: number = 1,
+  thresholds: SharedEscalationThresholds = DEFAULT_THRESHOLDS,
 ): SharedChangeAction {
   const evaluation = evaluateSharedChange(submission, brief);
 
@@ -195,7 +212,7 @@ export function handleUnexpectedSharedChange(
   // Consumer blocked on shared
   if (evaluation.needs_redispatch) {
     // Check if this would trigger escalation (total changes about to hit 2)
-    if (history.total_shared_changes >= 1) {
+    if (history.total_shared_changes >= thresholds.maxSharedChanges - 1) {
       return {
         action: "escalate_tier3",
         reason: `Shared changes would reach ${history.total_shared_changes + 1} (threshold: 2)`,
@@ -204,7 +221,7 @@ export function handleUnexpectedSharedChange(
 
     // Find the owner to re-dispatch
     const { ownerId } = identifySharedOwner(brief);
-    const ownerCard = buildRedispatchCard(ownerId, submission, brief);
+    const ownerCard = buildRedispatchCard(ownerId, submission, brief, currentDispatchRev);
 
     return {
       action: "redispatch_owner",
@@ -221,33 +238,41 @@ export function handleUnexpectedSharedChange(
 
 // ─── Helpers ────────────────────────────────────────────
 
-function buildEscalationReason(history: SharedChangeHistory): string {
+function buildEscalationReason(
+  history: SharedChangeHistory,
+  thresholds: SharedEscalationThresholds = DEFAULT_THRESHOLDS,
+): string {
   const reasons: string[] = [];
-  if (history.total_shared_changes >= 2) {
-    reasons.push(`shared changes: ${history.total_shared_changes} (threshold: 2)`);
+  if (history.total_shared_changes >= thresholds.maxSharedChanges) {
+    reasons.push(`shared changes: ${history.total_shared_changes} (threshold: ${thresholds.maxSharedChanges})`);
   }
   if (history.undiscovered_shared_surfaces.length > 0) {
     reasons.push(
       `undiscovered shared surfaces: ${history.undiscovered_shared_surfaces.join(", ")}`,
     );
   }
-  if (history.consumer_blocked_count >= 2) {
+  if (history.consumer_blocked_count >= thresholds.maxConsumerBlocked) {
     reasons.push(
-      `consumer blocked count: ${history.consumer_blocked_count} (threshold: 2)`,
+      `consumer blocked count: ${history.consumer_blocked_count} (threshold: ${thresholds.maxConsumerBlocked})`,
     );
   }
   return `Tier 3 escalation triggered: ${reasons.join("; ")}`;
 }
 
+/**
+ * Build a re-dispatch card for the shared surface owner.
+ * @param _brief Reserved for future: brief-aware write_scope and input_refs generation.
+ */
 function buildRedispatchCard(
   ownerId: string,
   submission: SpecialistSubmission,
   _brief: Brief,
+  currentDispatchRev: number = 1,
 ): DispatchCard {
   const surface = submission.blocked_on?.surface ?? "unknown";
   return {
     version: 1,
-    dispatch_rev: 2, // incremented from original rev 1
+    dispatch_rev: currentDispatchRev + 1,
     role: "specialist",
     id: ownerId,
     tier: 2,

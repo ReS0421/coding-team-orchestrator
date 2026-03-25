@@ -319,3 +319,54 @@ describe("runTier2 — shared path", () => {
     expect(result.tier3_escalation).toBe(true);
   });
 });
+
+// ─── Fix: correction loop infinite guard ──────────────
+
+describe("runTier2 — correction empty guard", () => {
+  it("escalates when fix_and_rereview produces no re-dispatch cards", async () => {
+    let reviewCalls = 0;
+    const runner: RunnerFn = async (card) => {
+      if (card.role === "planner") return { tasks_md: "# tasks" };
+      if (card.role === "reviewer") {
+        reviewCalls++;
+        return {
+          review_report: "problems found",
+          disposition_recommendation: "FAIL" as const,
+          issues: [{
+            issue_id: "i-1",
+            severity: "major" as const,
+            blocking: true,
+            evidence: "ghost specialist problem",
+            fix_owner: "nonexistent-specialist",
+          }],
+        };
+      }
+      return {
+        status: "done" as const, touched_files: ["f"], changeset: "c", delta_stub: "d",
+        evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+      };
+    };
+
+    const brief: Brief = {
+      brief_id: "correction-empty",
+      goal: "Test", out_of_scope: [],
+      specialists: [
+        { id: "specialist-1", scope: ["src/auth/"], owns: [] },
+        { id: "specialist-2", scope: ["src/api/"], owns: [] },
+      ],
+      shared: [], accept_checks: ["build"], escalate_if: [],
+    };
+
+    const result = await runTier2(
+      { projectRoot: tmpDir, logDir: tmpDir, runner },
+      { task: "test", write_scope: ["src/auth/", "src/api/"], brief },
+    );
+
+    // Should not infinite loop — should escalate
+    expect(result.success).toBe(false);
+    expect(result.phase).toBe("correction");
+    expect(result.error).toContain("no re-dispatch cards");
+    // Reviewer called at most twice (initial + 1 correction attempt), not infinite
+    expect(reviewCalls).toBeLessThanOrEqual(3);
+  });
+});

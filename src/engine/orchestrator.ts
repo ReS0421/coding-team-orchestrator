@@ -57,7 +57,7 @@ export async function runTier1(
   saveManifest(config.projectRoot, manifest);
 
   // ── TIER_JUDGE ──
-  const tier = judgeTier({
+  const { tier } = judgeTier({
     write_scope: request.write_scope,
     shared_surfaces: request.shared_surfaces,
   });
@@ -316,6 +316,27 @@ export interface Tier2Result {
   manifest_lite_seq?: number;
 }
 
+
+// ── Helper: retry failed specialists ──
+async function retryFailedSpecialists(
+  results: ParallelResult,
+  cards: DispatchCard[],
+  runner: RunnerFn,
+): Promise<ParallelResult> {
+  if (results.all_succeeded) return results;
+  const failedCards = cards.filter((c) => results.failed_ids.includes(c.id));
+  if (failedCards.length === 0) return results;
+
+  const retryResults = await runParallel(failedCards, runner);
+  const retryMap = new Map(retryResults.settled.map((s) => [s.id, s]));
+  const settled = results.settled.map((s) => retryMap.has(s.id) ? retryMap.get(s.id)! : s);
+  return {
+    settled,
+    all_succeeded: settled.every((s) => s.status === "fulfilled"),
+    failed_ids: settled.filter((s) => s.status === "rejected").map((s) => s.id),
+  };
+}
+
 export async function runTier2(
   config: Tier2Config,
   request: Tier2Request,
@@ -336,7 +357,7 @@ export async function runTier2(
   }
   saveManifest(config.projectRoot, manifest);
 
-  const tier = judgeTier({
+  const { tier } = judgeTier({
     write_scope: request.write_scope,
     shared_surfaces: request.shared_surfaces,
     specialist_count: request.brief.specialists.length,
@@ -541,18 +562,7 @@ export async function runTier2(
     specialistResults = await runParallel(currentCards, config.runner);
 
     // Retry failed
-    if (!specialistResults.all_succeeded) {
-      const failedCards = currentCards.filter((c) => specialistResults.failed_ids.includes(c.id));
-      if (failedCards.length > 0) {
-        const retryResults = await runParallel(failedCards, config.runner);
-        const retryMap = new Map(retryResults.settled.map((s) => [s.id, s]));
-        specialistResults = {
-          settled: specialistResults.settled.map((s) => retryMap.has(s.id) ? retryMap.get(s.id)! : s),
-          all_succeeded: specialistResults.settled.every((s) => (retryMap.has(s.id) ? retryMap.get(s.id)!.status === "fulfilled" : s.status === "fulfilled")),
-          failed_ids: specialistResults.settled.filter((s) => { const f = retryMap.has(s.id) ? retryMap.get(s.id)! : s; return f.status === "rejected"; }).map((s) => s.id),
-        };
-      }
-    }
+    specialistResults = await retryFailedSpecialists(specialistResults, currentCards, config.runner);
 
     if (!specialistResults.all_succeeded) {
       appendErrorLog(
@@ -574,18 +584,7 @@ export async function runTier2(
     specialistResults = await runParallel(currentCards, config.runner);
 
     // Retry failed specialists (contained propagation)
-    if (!specialistResults.all_succeeded) {
-      const failedCards = currentCards.filter((c) => specialistResults.failed_ids.includes(c.id));
-      if (failedCards.length > 0) {
-        const retryResults = await runParallel(failedCards, config.runner);
-        const retryMap = new Map(retryResults.settled.map((s) => [s.id, s]));
-        specialistResults = {
-          settled: specialistResults.settled.map((s) => retryMap.has(s.id) ? retryMap.get(s.id)! : s),
-          all_succeeded: specialistResults.settled.every((s) => (retryMap.has(s.id) ? retryMap.get(s.id)!.status === "fulfilled" : s.status === "fulfilled")),
-          failed_ids: specialistResults.settled.filter((s) => { const f = retryMap.has(s.id) ? retryMap.get(s.id)! : s; return f.status === "rejected"; }).map((s) => s.id),
-        };
-      }
-    }
+    specialistResults = await retryFailedSpecialists(specialistResults, currentCards, config.runner);
 
     if (!specialistResults.all_succeeded) {
       appendErrorLog(
@@ -743,8 +742,27 @@ export async function runTier2(
     // fix_and_rereview
     correctionCount++;
 
+    // Guard: if fix_and_rereview but no cards to re-dispatch → escalate to avoid infinite loop
+    if (correction.re_dispatch_cards.length === 0) {
+      appendErrorLog(
+        makeErrorLog(sessionId, "reviewer", "stalled", correctionCount, maxCorrections, [],
+          "escalate"),
+        { logDir: config.logDir },
+      );
+      return {
+        success: false, tier: 2, phase: "correction",
+        specialist_results: specialistResults, correction_count: correctionCount,
+        planner_result: plannerResult,
+        error: "Correction requested fix_and_rereview but produced no re-dispatch cards — escalating",
+        shared_changes: sharedChanges,
+        acting_lead_id: leadDecision.acting_lead_id,
+        tier3_escalation: false,
+        manifest_lite_seq: manifestLiteSeq,
+      };
+    }
+
     // Re-execute failed specialists
-    if (correction.re_dispatch_cards.length > 0) {
+    {
       const correctionResults = await runParallel(correction.re_dispatch_cards, config.runner);
 
       // Update specialist results with correction results

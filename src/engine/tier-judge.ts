@@ -23,7 +23,12 @@ export interface TierJudgeInput {
  *
  * 2차 기준 (보조): write_scope 20+ → Tier 3 가드
  */
-export function judgeTier(input: TierJudgeInput): Tier {
+export interface TierJudgeResult {
+  tier: Tier;
+  reason?: string;
+}
+
+export function judgeTier(input: TierJudgeInput): TierJudgeResult {
   const specialistCount = input.specialist_count ?? 1;
   const shared = input.shared_surfaces ?? [];
   const hasShared = shared.length > 0;
@@ -31,46 +36,51 @@ export function judgeTier(input: TierJudgeInput): Tier {
   // ── Tier 3 경계 가드 ──
   // shared 3개 이상
   if (shared.length > 2) {
-    throw new Error(
-      `Tier 3 not supported yet: ${shared.length} shared surfaces exceed Tier 2 limit (max 2)`,
-    );
+    return {
+      tier: 3,
+      reason: `${shared.length} shared surfaces exceed Tier 2 limit (max 2)`,
+    };
   }
 
   // controllable=false인 shared가 있으면 Tier 3
   const uncontrollable = shared.filter((s) => s.controllable === false);
   if (uncontrollable.length > 0) {
-    throw new Error(
-      `Tier 3 not supported yet: uncontrollable shared surfaces [${uncontrollable.map((s) => s.path).join(", ")}]`,
-    );
+    return {
+      tier: 3,
+      reason: `Uncontrollable shared surfaces: ${uncontrollable.map((s) => s.path).join(", ")}`,
+    };
   }
 
   // owner 미지정 shared가 있으면 Tier 3
   const noOwner = shared.filter((s) => !s.owner || s.owner.trim() === "");
   if (noOwner.length > 0) {
-    throw new Error(
-      `Tier 3 not supported yet: shared surfaces without owner [${noOwner.map((s) => s.path).join(", ")}]`,
-    );
+    return {
+      tier: 3,
+      reason: `Shared surfaces without owner: ${noOwner.map((s) => s.path).join(", ")}`,
+    };
   }
 
   // specialist 4명 이상 → Tier 3
   if (specialistCount > 3) {
-    throw new Error(
-      `Tier 3 not supported yet: specialist_count ${specialistCount} exceeds Tier 2 limit (max 3)`,
-    );
+    return {
+      tier: 3,
+      reason: `specialist_count ${specialistCount} exceeds Tier 2 limit (max 3)`,
+    };
   }
 
   // write_scope 20+ → Tier 3 가드 (보조 기준)
   if (input.write_scope.length > 20) {
-    throw new Error(
-      `Tier 3 not supported yet: write_scope ${input.write_scope.length} exceeds Tier 2 limit (max 20)`,
-    );
+    return {
+      tier: 3,
+      reason: `write_scope ${input.write_scope.length} exceeds Tier 2 limit (max 20)`,
+    };
   }
 
   // ── Tier 1 ──
   if (!hasShared && specialistCount <= 1 && input.write_scope.length <= 5) {
-    return Tier.ONE;
+    return { tier: 1 };
   }
 
   // ── Tier 2 ──
-  return Tier.TWO;
+  return { tier: 2 };
 }

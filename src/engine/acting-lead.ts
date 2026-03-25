@@ -6,7 +6,13 @@ import type { DispatchCard } from "../schemas/dispatch-card.js";
 export interface ActingLeadDecision {
   needs_acting_lead: boolean;
   acting_lead_id?: string;
+  /**
+   * Who creates dispatch cards. Currently always matches merge_owner.
+   * Separated for Tier 3 where dispatch (card creation) and merge (commit authority)
+   * may be owned by different roles (e.g., execution_lead dispatches, orchestrator merges).
+   */
   dispatch_owner: "openclaw" | "acting_lead";
+  /** Who has commit/merge authority. See dispatch_owner note. */
   merge_owner: "openclaw" | "acting_lead";
 }
 
@@ -68,7 +74,7 @@ export function applyActingLeadToCards(
   }
 
   return cards.map((card) => {
-    if (card.id.startsWith(decision.acting_lead_id!)) {
+    if (card.id === decision.acting_lead_id || card.id.startsWith(decision.acting_lead_id! + "-")) {
       return { ...card, is_acting_lead: true };
     }
     return card;

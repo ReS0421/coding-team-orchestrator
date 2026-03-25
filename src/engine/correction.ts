@@ -46,12 +46,12 @@ export function decideCorrection(ctx: CorrectionContext): CorrectionDecision {
   // Fix and re-review
   const re_dispatch_cards = ctx.original_cards
     .filter((card) =>
-      ctx.failed_specialist_ids.some((failedId) => card.id.startsWith(failedId) || card.id === failedId),
+      ctx.failed_specialist_ids.some((failedId) => card.id === failedId || card.id.startsWith(failedId + "-")),
     )
     .map((card) => ({
       ...card,
       dispatch_rev: card.dispatch_rev + 1,
-      task: `[CORRECTION] ${card.task}`,
+      task: card.task.startsWith("[CORRECTION]") ? card.task : `[CORRECTION] ${card.task}`,
     }));
 
   // If no matching cards found, re-dispatch all failed IDs' cards
@@ -76,7 +76,7 @@ export function decideCorrection(ctx: CorrectionContext): CorrectionDecision {
     ? {
         ...reviewerTemplate,
         dispatch_rev: reviewerTemplate.dispatch_rev + 1,
-        task: `[RE-REVIEW] ${reviewerTemplate.task}`,
+        task: reviewerTemplate.task.startsWith("[RE-REVIEW]") ? reviewerTemplate.task : `[RE-REVIEW] ${reviewerTemplate.task}`,
         input_refs: re_dispatch_cards.map((c) => c.id),
       }
     : {
