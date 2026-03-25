@@ -92,13 +92,14 @@ function applySinglePatch(
       break;
 
     case "increment": {
-      const cur = (currentValue as number) ?? 0;
-      const inc = patch.new_value as number;
-      if (typeof cur !== "number" || typeof inc !== "number") {
-        return {
-          error: `Increment requires numeric values for '${patch.field}' of '${patch.artifact_id}'`,
-        };
+      if (currentValue !== undefined && typeof currentValue !== "number") {
+        return { error: `Field '${patch.field}' of '${patch.artifact_id}': expected number for increment, got ${typeof currentValue}` };
       }
+      if (typeof patch.new_value !== "number") {
+        return { error: `Increment new_value must be number for '${patch.field}' of '${patch.artifact_id}', got ${typeof patch.new_value}` };
+      }
+      const cur = (currentValue as number) ?? 0;
+      const inc = patch.new_value;
       (updatedArtifact as Record<string, unknown>)[patch.field] = cur + inc;
       break;
     }
@@ -118,5 +119,19 @@ function applySinglePatch(
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== "object") return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((val, i) => deepEqual(val, b[i]));
+  }
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj).sort();
+  const bKeys = Object.keys(bObj).sort();
+  if (aKeys.length !== bKeys.length) return false;
+  if (!aKeys.every((k, i) => k === bKeys[i])) return false;
+  return aKeys.every((k) => deepEqual(aObj[k], bObj[k]));
 }
