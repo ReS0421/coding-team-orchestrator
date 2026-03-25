@@ -7,12 +7,17 @@ export interface PatchResult {
   errors: string[];
 }
 
+export interface PatchOptions {
+  incrementSeq?: boolean;
+}
+
 /**
  * Apply a patch set to a manifest with optimistic concurrency and all_or_fail semantics.
  */
 export function applyPatchSet(
   manifest: ProjectManifest,
   patchSet: ManifestPatchSet,
+  options?: PatchOptions,
 ): PatchResult {
   // Optimistic concurrency check
   if (patchSet.base_manifest_seq !== manifest.manifest_seq) {
@@ -46,10 +51,13 @@ export function applyPatchSet(
     return { success: false, manifest, errors };
   }
 
-  // Success: increment manifest_seq
+  // Success: increment manifest_seq unless opted out
+  const shouldIncrement = options?.incrementSeq !== false;
   return {
     success: true,
-    manifest: { ...working, manifest_seq: working.manifest_seq + 1 },
+    manifest: shouldIncrement
+      ? { ...working, manifest_seq: working.manifest_seq + 1 }
+      : working,
     errors: [],
   };
 }

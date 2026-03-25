@@ -331,6 +331,41 @@ describe("applyPatchSet", () => {
     expect(result.success).toBe(true);
   });
 
+  // ── Task 4.4: incrementSeq option ──
+  it("incrementSeq false → seq unchanged", () => {
+    const m = makeManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "set", field: "freshness", new_value: "stale_soft", reason: "test" }],
+    };
+    const result = applyPatchSet(m, patchSet, { incrementSeq: false });
+    expect(result.success).toBe(true);
+    expect(result.manifest.manifest_seq).toBe(0);
+    expect(result.manifest.artifacts[0].freshness).toBe("stale_soft");
+  });
+
+  it("incrementSeq true → seq incremented", () => {
+    const m = makeManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "set", field: "freshness", new_value: "stale_soft", reason: "test" }],
+    };
+    const result = applyPatchSet(m, patchSet, { incrementSeq: true });
+    expect(result.success).toBe(true);
+    expect(result.manifest.manifest_seq).toBe(1);
+  });
+
+  it("default (no options) → seq incremented", () => {
+    const m = makeManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "set", field: "freshness", new_value: "stale_soft", reason: "test" }],
+    };
+    const result = applyPatchSet(m, patchSet);
+    expect(result.success).toBe(true);
+    expect(result.manifest.manifest_seq).toBe(1);
+  });
+
   it("does not modify original manifest on success", () => {
     const m = makeManifest();
     const patchSet: ManifestPatchSet = {
