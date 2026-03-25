@@ -1,5 +1,7 @@
 import type { ManifestPatchSet, ManifestPatch } from "../schemas/manifest-patch.js";
-import type { ManifestArtifact, ProjectManifest } from "./types.js";
+import type { ManifestArtifact, ProjectManifest, TransitionLogEntry } from "./types.js";
+import { ChangeClass } from "../domain/types.js";
+import { propagateFreshness } from "./freshness.js";
 
 export interface PatchResult {
   success: boolean;
@@ -124,6 +126,107 @@ function applySinglePatch(
 
   newArtifacts[idx] = updatedArtifact;
   return { manifest: { ...manifest, artifacts: newArtifacts } };
+}
+
+export interface PatchSetFullOptions {
+  changeClass?: ChangeClass;
+  timestamp?: string;
+}
+
+export interface PatchSetFullResult {
+  success: boolean;
+  manifest: ProjectManifest;
+  errors: string[];
+  transitions: TransitionLogEntry[];
+}
+
+/**
+ * Apply a patch set with full manifest lifecycle: patch → freshness → transitions → seq+1 (once).
+ */
+export function applyPatchSetFull(
+  manifest: ProjectManifest,
+  patchSet: ManifestPatchSet,
+  options?: PatchSetFullOptions,
+): PatchSetFullResult {
+  const changeClass = options?.changeClass ?? ChangeClass.STRUCTURAL;
+  const ts = options?.timestamp ?? new Date().toISOString();
+
+  // Apply patches without incrementing seq
+  const patchResult = applyPatchSet(manifest, patchSet, { incrementSeq: false });
+  if (!patchResult.success) {
+    return {
+      success: false,
+      manifest,
+      errors: patchResult.errors,
+      transitions: [],
+    };
+  }
+
+  let working = patchResult.manifest;
+
+  // Identify content_rev changes by comparing original to patched
+  const contentRevChanges: Array<{ artifactId: string; fromRev: number; toRev: number }> = [];
+  for (const patch of patchSet.patches) {
+    if (patch.field === "content_rev") {
+      const original = manifest.artifacts.find((a) => a.id === patch.artifact_id);
+      const updated = working.artifacts.find((a) => a.id === patch.artifact_id);
+      if (original && updated && original.content_rev !== updated.content_rev) {
+        // Dedup
+        if (!contentRevChanges.some((c) => c.artifactId === patch.artifact_id)) {
+          contentRevChanges.push({
+            artifactId: patch.artifact_id,
+            fromRev: original.content_rev,
+            toRev: updated.content_rev,
+          });
+        }
+      }
+    }
+  }
+
+  // Propagate freshness for each changed artifact
+  const transitions: TransitionLogEntry[] = [];
+  const newSeq = manifest.manifest_seq + 1;
+
+  for (const change of contentRevChanges) {
+    const prePropagate = working;
+    working = propagateFreshness(working, change.artifactId, changeClass);
+
+    // Record invalidated artifacts
+    const invalidated: Array<{ artifact_id: string; freshness_change: string }> = [];
+    for (let i = 0; i < working.artifacts.length; i++) {
+      const before = prePropagate.artifacts[i];
+      const after = working.artifacts[i];
+      if (before.freshness !== after.freshness) {
+        invalidated.push({
+          artifact_id: after.id,
+          freshness_change: `${before.freshness ?? "undefined"} → ${after.freshness}`,
+        });
+      }
+    }
+
+    transitions.push({
+      artifact_id: change.artifactId,
+      from_content_rev: change.fromRev,
+      to_content_rev: change.toRev,
+      manifest_seq_at: newSeq,
+      change_class: changeClass,
+      reason: `patch applied`,
+      timestamp: ts,
+      ...(invalidated.length > 0 ? { invalidated } : {}),
+    });
+  }
+
+  // Increment manifest_seq once
+  return {
+    success: true,
+    manifest: {
+      ...working,
+      manifest_seq: newSeq,
+      transitions: [...manifest.transitions, ...transitions],
+    },
+    errors: [],
+    transitions,
+  };
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {

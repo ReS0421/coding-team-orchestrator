@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { applyPatchSet } from "../../src/store/patch-engine.js";
+import { applyPatchSet, applyPatchSetFull } from "../../src/store/patch-engine.js";
 import { createEmptyManifest, addArtifact } from "../../src/store/manifest.js";
-import { ArtifactFamily, Freshness, Lifecycle } from "../../src/domain/types.js";
+import { ArtifactFamily, ChangeClass, Freshness, Lifecycle } from "../../src/domain/types.js";
 import type { ManifestPatchSet } from "../../src/schemas/manifest-patch.js";
 
 function makeManifest() {
@@ -384,5 +384,124 @@ describe("applyPatchSet", () => {
     applyPatchSet(m, patchSet);
     expect(m.artifacts[0].freshness).toBe("fresh");
     expect(m.manifest_seq).toBe(0);
+  });
+});
+
+// ── Task 4.6: applyPatchSetFull ──
+describe("applyPatchSetFull", () => {
+  function makeFullManifest() {
+    let m = createEmptyManifest("full-test");
+    m = addArtifact(m, {
+      id: "spec", family: ArtifactFamily.REFERENCE, path: "spec.md",
+      content_rev: 3, lifecycle: Lifecycle.APPROVED, freshness: Freshness.FRESH,
+    });
+    m = addArtifact(m, {
+      id: "tasks", family: ArtifactFamily.REFERENCE, path: "tasks.md",
+      content_rev: 1, lifecycle: Lifecycle.DRAFT, freshness: Freshness.FRESH,
+      depends_on: ["spec"],
+    });
+    return m;
+  }
+
+  it("increment +1 with transition", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "increment", field: "content_rev", new_value: 1, reason: "bump" }],
+    };
+    const result = applyPatchSetFull(m, patchSet, { timestamp: "2026-03-25T00:00:00Z" });
+    expect(result.success).toBe(true);
+    expect(result.manifest.artifacts[0].content_rev).toBe(4);
+    expect(result.manifest.manifest_seq).toBe(1);
+    expect(result.transitions).toHaveLength(1);
+    expect(result.transitions[0].from_content_rev).toBe(3);
+    expect(result.transitions[0].to_content_rev).toBe(4);
+  });
+
+  it("increment +2 with transition", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "increment", field: "content_rev", new_value: 2, reason: "big bump" }],
+    };
+    const result = applyPatchSetFull(m, patchSet, { timestamp: "2026-03-25T00:00:00Z" });
+    expect(result.success).toBe(true);
+    expect(result.manifest.artifacts[0].content_rev).toBe(5);
+    expect(result.transitions[0].from_content_rev).toBe(3);
+    expect(result.transitions[0].to_content_rev).toBe(5);
+  });
+
+  it("set content_rev with transition", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "set", field: "content_rev", old_value: 3, new_value: 10, reason: "force" }],
+    };
+    const result = applyPatchSetFull(m, patchSet, { timestamp: "2026-03-25T00:00:00Z" });
+    expect(result.success).toBe(true);
+    expect(result.transitions[0].from_content_rev).toBe(3);
+    expect(result.transitions[0].to_content_rev).toBe(10);
+  });
+
+  it("no content_rev patch → seq incremented, no transitions", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "set", field: "freshness", new_value: "stale_soft", reason: "mark stale" }],
+    };
+    const result = applyPatchSetFull(m, patchSet, { timestamp: "2026-03-25T00:00:00Z" });
+    expect(result.success).toBe(true);
+    expect(result.manifest.manifest_seq).toBe(1);
+    expect(result.transitions).toHaveLength(0);
+  });
+
+  it("multiple artifact patches", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [
+        { artifact_id: "spec", op: "increment", field: "content_rev", new_value: 1, reason: "bump spec" },
+        { artifact_id: "tasks", op: "increment", field: "content_rev", new_value: 1, reason: "bump tasks" },
+      ],
+    };
+    const result = applyPatchSetFull(m, patchSet, { timestamp: "2026-03-25T00:00:00Z" });
+    expect(result.success).toBe(true);
+    expect(result.manifest.manifest_seq).toBe(1); // only +1
+    expect(result.transitions).toHaveLength(2);
+  });
+
+  it("failure returns original manifest unchanged", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "nonexistent", op: "set", field: "freshness", new_value: "stale_soft", reason: "test" }],
+    };
+    const result = applyPatchSetFull(m, patchSet);
+    expect(result.success).toBe(false);
+    expect(result.manifest).toBe(m);
+    expect(result.transitions).toHaveLength(0);
+  });
+
+  it("uses structural changeClass by default", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 0, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "increment", field: "content_rev", new_value: 1, reason: "bump" }],
+    };
+    const result = applyPatchSetFull(m, patchSet, { timestamp: "2026-03-25T00:00:00Z" });
+    expect(result.transitions[0].change_class).toBe("structural");
+    // Tasks depends on spec → should be stale_soft
+    expect(result.manifest.artifacts[1].freshness).toBe("stale_soft");
+  });
+
+  it("seq mismatch fails", () => {
+    const m = makeFullManifest();
+    const patchSet: ManifestPatchSet = {
+      base_manifest_seq: 99, apply_mode: "all_or_fail",
+      patches: [{ artifact_id: "spec", op: "set", field: "freshness", new_value: "stale_soft", reason: "test" }],
+    };
+    const result = applyPatchSetFull(m, patchSet);
+    expect(result.success).toBe(false);
+    expect(result.errors[0]).toContain("seq mismatch");
   });
 });
