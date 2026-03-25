@@ -71,6 +71,42 @@ describe("incrementContentRev", () => {
     const result = incrementContentRev(m, "spec", ChangeClass.SCOPE, "scope change");
     expect(result.transitions[0].timestamp).toBeTruthy();
   });
+
+  // ── Task 4.5: invalidated recording ──
+  it("structural change records invalidated dependents as stale_soft", () => {
+    let m = createEmptyManifest("inv-test");
+    m = addArtifact(m, { id: "core", family: ArtifactFamily.REFERENCE, path: "core.md", content_rev: 1, freshness: Freshness.FRESH });
+    m = addArtifact(m, { id: "dep", family: ArtifactFamily.REFERENCE, path: "dep.md", content_rev: 1, freshness: Freshness.FRESH, depends_on: ["core"] });
+    const result = incrementContentRev(m, "core", ChangeClass.STRUCTURAL, "restructure", "2026-03-25T00:00:00Z");
+    expect(result.transitions[0].invalidated).toBeDefined();
+    expect(result.transitions[0].invalidated).toHaveLength(1);
+    expect(result.transitions[0].invalidated![0].artifact_id).toBe("dep");
+    expect(result.artifacts.find(a => a.id === "dep")!.freshness).toBe("stale_soft");
+  });
+
+  it("behavioral change records invalidated dependents as stale_soft", () => {
+    let m = createEmptyManifest("inv-test2");
+    m = addArtifact(m, { id: "api", family: ArtifactFamily.REFERENCE, path: "api.md", content_rev: 1, freshness: Freshness.FRESH });
+    m = addArtifact(m, { id: "client", family: ArtifactFamily.REFERENCE, path: "client.md", content_rev: 1, freshness: Freshness.FRESH, depends_on: ["api"] });
+    const result = incrementContentRev(m, "api", ChangeClass.BEHAVIORAL, "API change", "2026-03-25T00:00:00Z");
+    expect(result.transitions[0].invalidated).toHaveLength(1);
+    expect(result.transitions[0].invalidated![0].artifact_id).toBe("client");
+  });
+
+  it("cosmetic change records no invalidated", () => {
+    let m = createEmptyManifest("inv-test3");
+    m = addArtifact(m, { id: "doc", family: ArtifactFamily.REFERENCE, path: "doc.md", content_rev: 1, freshness: Freshness.FRESH });
+    m = addArtifact(m, { id: "dep", family: ArtifactFamily.REFERENCE, path: "dep.md", content_rev: 1, freshness: Freshness.FRESH, depends_on: ["doc"] });
+    const result = incrementContentRev(m, "doc", ChangeClass.COSMETIC, "typo fix", "2026-03-25T00:00:00Z");
+    expect(result.transitions[0].invalidated).toBeUndefined();
+  });
+
+  it("no dependents → no invalidated", () => {
+    let m = createEmptyManifest("inv-test4");
+    m = addArtifact(m, { id: "lone", family: ArtifactFamily.REFERENCE, path: "lone.md", content_rev: 1, freshness: Freshness.FRESH });
+    const result = incrementContentRev(m, "lone", ChangeClass.STRUCTURAL, "change", "2026-03-25T00:00:00Z");
+    expect(result.transitions[0].invalidated).toBeUndefined();
+  });
 });
 
 describe("incrementManifestSeq", () => {
