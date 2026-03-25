@@ -4,6 +4,9 @@ import {
   restoreFromCheckpoint,
   listCheckpoints,
   getLatestCheckpoint,
+  shouldCreateCheckpoint,
+  createCheckpointForPhase,
+  findCheckpointByPhase,
 } from "../../src/store/checkpoint.js";
 import { createEmptyManifest, addArtifact } from "../../src/store/manifest.js";
 import { ArtifactFamily, Lifecycle, Freshness } from "../../src/domain/types.js";
@@ -118,5 +121,57 @@ describe("getLatestCheckpoint", () => {
     const cp1 = createCheckpoint(m, "2026-03-21T15:00:00Z");
     const cp2 = createCheckpoint(cp1, "2026-03-21T16:00:00Z");
     expect(getLatestCheckpoint(cp2)!.checkpoint_id).toBe("cp-2");
+  });
+});
+
+// ── Task 4.7: Phase-aware checkpoints ──
+describe("shouldCreateCheckpoint", () => {
+  it("returns true for planning→execution", () => {
+    expect(shouldCreateCheckpoint("planning", "execution")).toBe(true);
+  });
+
+  it("returns true for execution→review", () => {
+    expect(shouldCreateCheckpoint("execution", "review")).toBe(true);
+  });
+
+  it("returns true for review→done", () => {
+    expect(shouldCreateCheckpoint("review", "done")).toBe(true);
+  });
+
+  it("returns false for intake→planning", () => {
+    expect(shouldCreateCheckpoint("intake", "planning")).toBe(false);
+  });
+});
+
+describe("createCheckpointForPhase", () => {
+  it("creates checkpoint with cp-{phase}-{seq} id", () => {
+    const m = makeManifest();
+    const result = createCheckpointForPhase(m, "execution", "2026-03-25T00:00:00Z");
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0].checkpoint_id).toBe("cp-execution-1");
+    expect(result.manifest_seq).toBe(1);
+    expect(result.checkpoints[0].artifacts_snapshot).toHaveLength(2);
+  });
+
+  it("backward compat: original createCheckpoint still works", () => {
+    const m = makeManifest();
+    const result = createCheckpoint(m, "2026-03-25T00:00:00Z");
+    expect(result.checkpoints[0].checkpoint_id).toBe("cp-1");
+  });
+});
+
+describe("findCheckpointByPhase", () => {
+  it("finds checkpoint by phase", () => {
+    const m = makeManifest();
+    const withCp = createCheckpointForPhase(m, "execution", "2026-03-25T00:00:00Z");
+    const found = findCheckpointByPhase(withCp, "execution");
+    expect(found).toBeDefined();
+    expect(found!.checkpoint_id).toBe("cp-execution-1");
+  });
+
+  it("returns undefined when phase not found", () => {
+    const m = makeManifest();
+    const withCp = createCheckpointForPhase(m, "execution", "2026-03-25T00:00:00Z");
+    expect(findCheckpointByPhase(withCp, "review")).toBeUndefined();
   });
 });

@@ -1,8 +1,9 @@
 import type {
   CheckpointEntry,
-  ManifestArtifact,
   ProjectManifest,
 } from "./types.js";
+
+export type PhaseLabel = "execution" | "review" | "done";
 
 /**
  * Create a checkpoint snapshot of the current manifest state.
@@ -85,4 +86,56 @@ export function getLatestCheckpoint(
 ): CheckpointEntry | undefined {
   if (manifest.checkpoints.length === 0) return undefined;
   return manifest.checkpoints[manifest.checkpoints.length - 1];
+}
+
+/**
+ * Determine if a checkpoint should be created for a phase transition.
+ */
+export function shouldCreateCheckpoint(from: string, to: string): boolean {
+  const transitions = new Set([
+    "planning→execution",
+    "execution→review",
+    "review→done",
+    "review→correction",
+    "correction→review",
+    "execution→done",
+  ]);
+  return transitions.has(`${from}→${to}`);
+}
+
+/**
+ * Create a checkpoint with a phase-aware ID: cp-{phase}-{seq}.
+ */
+export function createCheckpointForPhase(
+  manifest: ProjectManifest,
+  phase: PhaseLabel,
+  timestamp?: string,
+): ProjectManifest {
+  const ts = timestamp ?? new Date().toISOString();
+  const newSeq = manifest.manifest_seq + 1;
+
+  const checkpoint: CheckpointEntry = {
+    checkpoint_id: `cp-${phase}-${newSeq}`,
+    manifest_seq: newSeq,
+    timestamp: ts,
+    artifacts_snapshot: manifest.artifacts.map((a) => ({ ...a })),
+  };
+
+  return {
+    ...manifest,
+    manifest_seq: newSeq,
+    checkpoints: [...manifest.checkpoints, checkpoint],
+  };
+}
+
+/**
+ * Find a checkpoint by phase label.
+ */
+export function findCheckpointByPhase(
+  manifest: ProjectManifest,
+  phase: PhaseLabel,
+): CheckpointEntry | undefined {
+  return manifest.checkpoints.find((c) =>
+    c.checkpoint_id.startsWith(`cp-${phase}-`),
+  );
 }
