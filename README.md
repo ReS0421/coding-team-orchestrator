@@ -15,7 +15,7 @@ npm test
 |--------|-------|-------|--------|
 | 1 | Tier 1 (Solo Specialist) | 200 | ✅ Complete |
 | 2 | Tier 2 (Multi-Specialist) | 331 | ✅ Complete |
-| 3 | Tier 2 Shared Surface | 433 | ✅ Complete |
+| 3 | Tier 2 Shared Surface | 434 | ✅ Complete |
 | 4 | Correction Loop + Review | — | 🔜 Next |
 | 5 | Tier 3 (Execution Lead) | — | Planned |
 
@@ -116,7 +116,14 @@ tests/
 - Specialist submissions extended: `BlockedOn` (reason, surface, owner_id), `shared_amendment_flag`
 - Tier 3 escalation signal: `tier3_escalation` in ErrorResolution + Tier2Result
 - 17 scenario tests across 4 test files
-- 433 tests (+102)
+- 434 tests (+103, includes code quality patch)
+
+### Post-Sprint 3: Code Quality Patch
+- **Critical fix**: correction loop infinite guard (empty re-dispatch → escalate)
+- **High fixes**: startsWith prefix collision, dispatch_rev hardcoded, tier-judge throw→return value
+- **Medium fixes**: Branch B/C dedup, prefix accumulation, dispatch/merge_owner JSDoc
+- **Low fixes**: unused param JSDoc, escalation thresholds parameterized
+- 434 tests (+1 correction guard test)
 
 ## Tech Stack
 
