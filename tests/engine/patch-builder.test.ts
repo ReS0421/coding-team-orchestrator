@@ -8,7 +8,7 @@ function makeManifest() {
   let m = createEmptyManifest("pb-test");
   m = addArtifact(m, { id: "spec", family: ArtifactFamily.REFERENCE, path: "spec.md", content_rev: 1, freshness: Freshness.FRESH });
   m = addArtifact(m, { id: "tasks", family: ArtifactFamily.REFERENCE, path: "tasks.md", content_rev: 2, freshness: Freshness.FRESH });
-  m = addArtifact(m, { id: "api", family: ArtifactFamily.REFERENCE, path: "src/api.ts", content_rev: 1, freshness: Freshness.FRESH });
+  m = addArtifact(m, { id: "api", family: ArtifactFamily.REFERENCE, path: "src/api", content_rev: 1, freshness: Freshness.FRESH });
   return m;
 }
 
@@ -46,7 +46,7 @@ describe("buildPatchSetFromSubmission", () => {
 
   it("auto-matches by prefix", () => {
     const m = makeManifest();
-    const result = buildPatchSetFromSubmission(makeSub(["src/api.test.ts"]), m);
+    const result = buildPatchSetFromSubmission(makeSub(["src/api/handler.ts"]), m);
     expect(result).not.toBeNull();
     expect(result!.patches[0].artifact_id).toBe("api");
   });

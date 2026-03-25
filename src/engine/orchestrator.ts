@@ -212,7 +212,7 @@ export async function runTier1(
       );
 
       // ── MANIFEST INTEGRATION ──
-      const patchSet = buildPatchSetFromSubmission(submission, manifest);
+      const patchSet = buildPatchSetFromSubmission(submission, manifest, undefined, dispatch_card.id);
       if (patchSet) {
         const fullResult = applyPatchSetFull(manifest, patchSet);
         if (fullResult.success) {
@@ -527,6 +527,12 @@ export async function runTier2(
     tier3Escalation = sharedResult.tier3_escalation;
 
     if (tier3Escalation) {
+      // Rollback to cp-execution checkpoint before returning
+      const execCp = findCheckpointByPhase(manifest, "execution");
+      if (execCp) {
+        manifest = restoreFromCheckpoint(manifest, execCp.checkpoint_id, "Tier 3 escalation");
+        saveManifest(config.projectRoot, manifest);
+      }
       return {
         success: false,
         tier: 2,
@@ -539,6 +545,8 @@ export async function runTier2(
         acting_lead_id: leadDecision.acting_lead_id,
         tier3_escalation: true,
         manifest_lite_seq: manifestLiteSeq,
+        final_manifest_seq: manifest.manifest_seq,
+        checkpoints_created: checkpointsCreated,
       };
     }
 
@@ -550,6 +558,12 @@ export async function runTier2(
     };
 
     if (!specialistResults.all_succeeded) {
+      // Rollback to cp-execution checkpoint
+      const execCp = findCheckpointByPhase(manifest, "execution");
+      if (execCp) {
+        manifest = restoreFromCheckpoint(manifest, execCp.checkpoint_id, "Branch A specialist failure");
+        saveManifest(config.projectRoot, manifest);
+      }
       return {
         success: false,
         tier: 2,
@@ -562,6 +576,8 @@ export async function runTier2(
         acting_lead_id: leadDecision.acting_lead_id,
         tier3_escalation: false,
         manifest_lite_seq: manifestLiteSeq,
+        final_manifest_seq: manifest.manifest_seq,
+        checkpoints_created: checkpointsCreated,
       };
     }
 
@@ -595,12 +611,20 @@ export async function runTier2(
           resolveError({ error_type: "crash", retry_count: 1, max_retries: maxRetries, correction_count: 0, max_corrections: maxCorrections, is_final_attempt: true })),
         { logDir: config.logDir },
       );
+      // Rollback to cp-execution checkpoint
+      const execCpB = findCheckpointByPhase(manifest, "execution");
+      if (execCpB) {
+        manifest = restoreFromCheckpoint(manifest, execCpB.checkpoint_id, "Branch B specialist failure");
+        saveManifest(config.projectRoot, manifest);
+      }
       return {
         success: false, tier: 2, phase: "execution",
         specialist_results: specialistResults, correction_count: 0, planner_result: plannerResult,
         error: `Specialists failed: ${specialistResults.failed_ids.join(", ")}`,
         shared_changes: 0, acting_lead_id: leadDecision.acting_lead_id, tier3_escalation: false,
         manifest_lite_seq: manifestLiteSeq,
+        final_manifest_seq: manifest.manifest_seq,
+        checkpoints_created: checkpointsCreated,
       };
     }
 
@@ -617,11 +641,19 @@ export async function runTier2(
           resolveError({ error_type: "crash", retry_count: 1, max_retries: maxRetries, correction_count: 0, max_corrections: maxCorrections, is_final_attempt: true })),
         { logDir: config.logDir },
       );
+      // Rollback to cp-execution checkpoint
+      const execCpC = findCheckpointByPhase(manifest, "execution");
+      if (execCpC) {
+        manifest = restoreFromCheckpoint(manifest, execCpC.checkpoint_id, "Branch C specialist failure");
+        saveManifest(config.projectRoot, manifest);
+      }
       return {
         success: false, tier: 2, phase: "execution",
         specialist_results: specialistResults, correction_count: 0, planner_result: plannerResult,
         error: `Specialists failed: ${specialistResults.failed_ids.join(", ")}`,
         shared_changes: 0, tier3_escalation: false,
+        final_manifest_seq: manifest.manifest_seq,
+        checkpoints_created: checkpointsCreated,
       };
     }
   }
@@ -645,13 +677,17 @@ export async function runTier2(
   // ── Task 4.11: Combined specialist commit ──
   {
     const allSubmissions: import("../schemas/specialist-submission.js").SpecialistSubmission[] = [];
+    const allSpecialistIds: string[] = [];
     for (const s of specialistResults.settled) {
       if (s.status === "fulfilled" && s.value) {
         const v = safeValidateSpecialistSubmission(s.value);
-        if (v.success) allSubmissions.push(v.data);
+        if (v.success) {
+          allSubmissions.push(v.data);
+          allSpecialistIds.push(s.id);
+        }
       }
     }
-    const combinedPatchSet = buildCombinedPatchSet(allSubmissions, manifest);
+    const combinedPatchSet = buildCombinedPatchSet(allSubmissions, manifest, undefined, allSpecialistIds);
     if (combinedPatchSet) {
       const fullResult = applyPatchSetFull(manifest, combinedPatchSet);
       if (fullResult.success) {
@@ -854,13 +890,17 @@ export async function runTier2(
     // 3. Re-commit ALL submissions (existing success + correction results)
     {
       const allSubmissions: import("../schemas/specialist-submission.js").SpecialistSubmission[] = [];
+      const allSpecialistIds: string[] = [];
       for (const s of specialistResults.settled) {
         if (s.status === "fulfilled" && s.value) {
           const v = safeValidateSpecialistSubmission(s.value);
-          if (v.success) allSubmissions.push(v.data);
+          if (v.success) {
+            allSubmissions.push(v.data);
+            allSpecialistIds.push(s.id);
+          }
         }
       }
-      const combinedPatchSet = buildCombinedPatchSet(allSubmissions, manifest);
+      const combinedPatchSet = buildCombinedPatchSet(allSubmissions, manifest, undefined, allSpecialistIds);
       if (combinedPatchSet) {
         const fullResult = applyPatchSetFull(manifest, combinedPatchSet);
         if (fullResult.success) {

@@ -138,8 +138,8 @@ describe("shouldCreateCheckpoint", () => {
     expect(shouldCreateCheckpoint("review", "done")).toBe(true);
   });
 
-  it("returns false for intake→planning", () => {
-    expect(shouldCreateCheckpoint("intake", "planning")).toBe(false);
+  it("returns true for intake→planning", () => {
+    expect(shouldCreateCheckpoint("intake", "planning")).toBe(true);
   });
 });
 

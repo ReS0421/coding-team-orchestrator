@@ -3,7 +3,7 @@ import type {
   ProjectManifest,
 } from "./types.js";
 
-export type PhaseLabel = "execution" | "review" | "done";
+export type PhaseLabel = "intake" | "planning" | "execution" | "review" | "correction" | "done" | "failed";
 
 /**
  * Create a checkpoint snapshot of the current manifest state.
@@ -93,6 +93,7 @@ export function getLatestCheckpoint(
  */
 export function shouldCreateCheckpoint(from: string, to: string): boolean {
   const transitions = new Set([
+    "intake→planning",
     "planning→execution",
     "execution→review",
     "review→done",
@@ -129,13 +130,14 @@ export function createCheckpointForPhase(
 }
 
 /**
- * Find a checkpoint by phase label.
+ * Find the most recent checkpoint by phase label.
+ * Searches from newest to oldest to return the latest match.
  */
 export function findCheckpointByPhase(
   manifest: ProjectManifest,
   phase: PhaseLabel,
 ): CheckpointEntry | undefined {
-  return manifest.checkpoints.find((c) =>
-    c.checkpoint_id.startsWith(`cp-${phase}-`),
-  );
+  return [...manifest.checkpoints]
+    .reverse()
+    .find((c) => c.checkpoint_id.startsWith(`cp-${phase}-`));
 }
