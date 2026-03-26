@@ -8,3 +8,4 @@ export * from "./acting-lead.js";
 export * from "./patch-builder.js";
 export * from "./rolling-dispatch.js";
 export * from "./shared-owner-lifecycle.js";
+export * from "./heartbeat.js";
