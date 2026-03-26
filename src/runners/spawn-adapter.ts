@@ -4,6 +4,7 @@ import type { BlockedOn } from "../schemas/specialist-submission.js";
 import type { RunnerFn, RunnerReturn, ParallelResult, SettledResult } from "./types.js";
 import { resolveError } from "../engine/error-resolution.js";
 import { buildTaskTemplate, type TaskTemplateConfig } from "./task-template.js";
+import { parseSpawnOutput } from "./output-parser.js";
 
 
 export interface SpawnOptions {
@@ -84,12 +85,10 @@ export function createSpawnAdapter(config: SpawnAdapterConfig): RunnerFn {
         });
 
         if (result.success && result.output) {
-          // parseSpawnOutput is imported from output-parser (Task 6.7)
-          // For now, JSON.parse + basic validation; full parser in next task
           try {
-            return JSON.parse(result.output) as RunnerReturn;
-          } catch {
-            lastError = new Error("Failed to parse spawn output as JSON");
+            return parseSpawnOutput(card, result.output);
+          } catch (e) {
+            lastError = e instanceof Error ? e : new Error(String(e));
             if (attempt < maxRetries) continue;
             break;
           }
