@@ -116,4 +116,105 @@ describe("runRollingDispatch", () => {
     expect(completedSlots).toHaveLength(3);
     expect(completedSlots.every((s) => s.state === RollingSlotState.COMPLETED)).toBe(true);
   });
+
+
+describe("merge conflict detection", () => {
+  it("overlapping touched_files → merge_conflicts includes IDs", async () => {
+    const cards = [makeCard("spec-1"), makeCard("spec-2")];
+    const runner = async (card: any) => ({
+      status: "done" as const,
+      touched_files: ["shared.ts", `unique-${card.id}.ts`],
+      changeset: "c",
+      delta_stub: "d",
+      evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+    });
+
+    const result = await runRollingDispatch({
+      active_span: 2,
+      specialist_cards: cards,
+      runner,
+    });
+    expect(result.merge_conflicts.length).toBeGreaterThan(0);
+    expect(result.merge_conflicts).toContain("spec-1");
+  });
+
+  it("onMergeConflict resolve → slot stays COMPLETED", async () => {
+    const cards = [makeCard("spec-1"), makeCard("spec-2")];
+    const runner = async () => ({
+      status: "done" as const,
+      touched_files: ["shared.ts"],
+      changeset: "c",
+      delta_stub: "d",
+      evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+    });
+
+    const result = await runRollingDispatch({
+      active_span: 2,
+      specialist_cards: cards,
+      runner,
+      onMergeConflict: () => "resolve",
+    });
+    expect(result.all_succeeded).toBe(true);
+    expect(result.merge_conflicts.length).toBeGreaterThan(0);
+  });
+
+  it("onMergeConflict hold → slot becomes FAILED", async () => {
+    const cards = [makeCard("spec-1"), makeCard("spec-2")];
+    const runner = async () => ({
+      status: "done" as const,
+      touched_files: ["shared.ts"],
+      changeset: "c",
+      delta_stub: "d",
+      evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+    });
+
+    const result = await runRollingDispatch({
+      active_span: 2,
+      specialist_cards: cards,
+      runner,
+      onMergeConflict: () => "hold",
+    });
+    expect(result.all_succeeded).toBe(false);
+    expect(result.failed_ids.length).toBeGreaterThan(0);
+  });
+
+  it("no overlap → merge_conflicts empty", async () => {
+    const cards = [makeCard("spec-1"), makeCard("spec-2")];
+    const runner = async (card: any) => ({
+      status: "done" as const,
+      touched_files: [`unique-${card.id}.ts`],
+      changeset: "c",
+      delta_stub: "d",
+      evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+    });
+
+    const result = await runRollingDispatch({
+      active_span: 2,
+      specialist_cards: cards,
+      runner,
+    });
+    expect(result.merge_conflicts).toEqual([]);
+  });
+
+  it("no onMergeConflict + conflict → default resolve (backward compat)", async () => {
+    const cards = [makeCard("spec-1"), makeCard("spec-2")];
+    const runner = async () => ({
+      status: "done" as const,
+      touched_files: ["shared.ts"],
+      changeset: "c",
+      delta_stub: "d",
+      evidence: { build_pass: true, test_pass: true, test_summary: "ok" },
+    });
+
+    const result = await runRollingDispatch({
+      active_span: 2,
+      specialist_cards: cards,
+      runner,
+    });
+    // Default: no callback → slots stay COMPLETED
+    expect(result.all_succeeded).toBe(true);
+    expect(result.merge_conflicts.length).toBeGreaterThan(0);
+  });
+});
+
 });

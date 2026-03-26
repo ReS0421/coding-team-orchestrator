@@ -15,12 +15,14 @@ export interface RollingDispatchConfig {
   specialist_cards: DispatchCard[];
   runner: RunnerFn;
   onSlotComplete?: (slot: RollingSlot) => void;
+  onMergeConflict?: (slot: RollingSlot) => "resolve" | "hold";
 }
 
 export interface RollingDispatchResult {
   slots: RollingSlot[];
   all_succeeded: boolean;
   failed_ids: string[];
+  merge_conflicts: string[];
 }
 
 /**
@@ -32,10 +34,10 @@ export interface RollingDispatchResult {
 export async function runRollingDispatch(
   config: RollingDispatchConfig,
 ): Promise<RollingDispatchResult> {
-  const { active_span, specialist_cards, runner, onSlotComplete } = config;
+  const { active_span, specialist_cards, runner, onSlotComplete, onMergeConflict } = config;
 
   if (specialist_cards.length === 0) {
-    return { slots: [], all_succeeded: true, failed_ids: [] };
+    return { slots: [], all_succeeded: true, failed_ids: [], merge_conflicts: [] };
   }
 
   const slots: RollingSlot[] = [];
@@ -80,6 +82,29 @@ export async function runRollingDispatch(
     }
   }
 
+  // Detect merge conflicts (overlapping touched_files between completed slots)
+  const mergeConflicts: string[] = [];
+  for (const slot of slots) {
+    if (slot.state !== RollingSlotState.COMPLETED || !slot.result?.touched_files) continue;
+    const touched = new Set(slot.result.touched_files);
+    for (const other of slots) {
+      if (other === slot || other.state !== RollingSlotState.COMPLETED) continue;
+      if (other.result?.touched_files?.some(f => touched.has(f))) {
+        if (!mergeConflicts.includes(slot.specialist_id)) {
+          mergeConflicts.push(slot.specialist_id);
+        }
+        // Call onMergeConflict callback
+        if (onMergeConflict) {
+          const action = onMergeConflict(slot);
+          if (action === "hold") {
+            slot.state = RollingSlotState.FAILED;
+          }
+        }
+        break;
+      }
+    }
+  }
+
   const failed_ids = slots
     .filter((s) => s.state === RollingSlotState.FAILED)
     .map((s) => s.specialist_id);
@@ -88,6 +113,7 @@ export async function runRollingDispatch(
     slots,
     all_succeeded: failed_ids.length === 0,
     failed_ids,
+    merge_conflicts: mergeConflicts,
   };
 }
 
