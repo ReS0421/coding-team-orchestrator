@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SpecialistSubmissionSchema } from "./specialist-submission.js";
 import { ManifestPatchSetSchema } from "./manifest-patch.js";
+import { ExecutionContractSchema } from "./execution-contract.js";
 
 export const RescueLogEntrySchema = z.object({
   task_id: z.string().min(1),
@@ -21,6 +22,9 @@ export const LeadReturnSchema = z.object({
   manifest_updates: ManifestPatchSetSchema,
   rescue_log: z.array(RescueLogEntrySchema).optional(),
   escalation_log: z.array(EscalationLogEntrySchema).optional(),
+  // Sprint 5: Tier 3 fields
+  execution_contract: ExecutionContractSchema.optional(),
+  shared_owner_states: z.record(z.string(), z.enum(["active", "advisory", "terminated"])).optional(),
 });
 
 export type LeadReturn = z.infer<typeof LeadReturnSchema>;

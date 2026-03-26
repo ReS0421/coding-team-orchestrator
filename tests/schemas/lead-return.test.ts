@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateLeadReturn } from "../../src/schemas/lead-return.js";
+import { validateLeadReturn, safeValidateLeadReturn } from "../../src/schemas/lead-return.js";
 
 const validReturn = {
   final_merge_candidate: true,
@@ -57,5 +57,40 @@ describe("LeadReturn - invalid", () => {
   });
   it("rejects string final_merge_candidate", () => {
     expect(() => validateLeadReturn({ ...validReturn, final_merge_candidate: "yes" })).toThrow();
+  });
+});
+
+// Sprint 5 additions
+describe("LeadReturn - Sprint 5 fields", () => {
+  it("accepts execution_contract optional field", () => {
+    const result = validateLeadReturn({
+      ...validReturn,
+      execution_contract: {
+        contract_id: "c1",
+        brief_id: "b1",
+        specialist_assignments: [{ specialist_id: "s1", task: "build feature" }],
+      },
+    });
+    expect(result.execution_contract?.contract_id).toBe("c1");
+  });
+
+  it("accepts shared_owner_states optional field", () => {
+    const result = validateLeadReturn({
+      ...validReturn,
+      shared_owner_states: {
+        "owner-1": "active",
+        "owner-2": "terminated",
+      },
+    });
+    expect(result.shared_owner_states?.["owner-1"]).toBe("active");
+    expect(result.shared_owner_states?.["owner-2"]).toBe("terminated");
+  });
+
+  it("rejects invalid shared_owner_state value", () => {
+    const result = safeValidateLeadReturn({
+      ...validReturn,
+      shared_owner_states: { "owner-1": "invalid_state" },
+    });
+    expect(result.success).toBe(false);
   });
 });
