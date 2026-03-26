@@ -124,3 +124,73 @@ describe("decideCorrection", () => {
     expect(result.reviewer_re_dispatch!.role).toBe("reviewer");
   });
 });
+
+// ─── Tier 3 correction tests ─────────────────────────────
+
+import { decideTier3Correction, type Tier3CorrectionContext } from "../../src/engine/correction.js";
+
+function makeTier3Context(overrides?: Partial<Tier3CorrectionContext>): Tier3CorrectionContext {
+  return {
+    review_result: makeReview(),
+    failed_specialist_ids: ["specialist-1"],
+    original_cards: [
+      makeDispatchCard({ id: "specialist-1", role: "specialist", tier: 3 }),
+      makeDispatchCard({ id: "reviewer-1", role: "reviewer", tier: 3 }),
+    ],
+    brief: makeBrief(),
+    correction_count: 0,
+    max_corrections: 4,
+    per_fix_owner_count: { "specialist-1": 0 },
+    max_per_fix_owner: 2,
+    max_total_per_cycle: 4,
+    ...overrides,
+  };
+}
+
+describe("decideTier3Correction", () => {
+  it("total >= max_total_per_cycle → escalate", () => {
+    const ctx = makeTier3Context({
+      per_fix_owner_count: { "specialist-1": 2, "specialist-2": 2 },
+    });
+    const result = decideTier3Correction(ctx);
+    expect(result.disposition).toBe("escalate");
+  });
+
+  it("per_owner >= max + alt available → reassign", () => {
+    const ctx = makeTier3Context({
+      per_fix_owner_count: { "specialist-1": 2 },
+      available_specialists: ["specialist-1", "specialist-2"],
+    });
+    const result = decideTier3Correction(ctx);
+    expect(result.disposition).toBe("fix_and_rereview");
+    expect(result.reassign_to).toBe("specialist-2");
+  });
+
+  it("per_owner >= max + no alt → escalate", () => {
+    const ctx = makeTier3Context({
+      per_fix_owner_count: { "specialist-1": 2 },
+      available_specialists: ["specialist-1"], // only self
+    });
+    const result = decideTier3Correction(ctx);
+    expect(result.disposition).toBe("escalate");
+  });
+
+  it("issue_persistence >= 2 → escalate", () => {
+    const ctx = makeTier3Context({
+      issue_persistence: { "REV-1": 2 },
+    });
+    const result = decideTier3Correction(ctx);
+    expect(result.disposition).toBe("escalate");
+  });
+
+  it("no blocking issues → abort", () => {
+    const ctx = makeTier3Context({
+      review_result: makeReview({
+        disposition_recommendation: "PASS",
+        issues: [{ issue_id: "REV-1", severity: "minor", blocking: false, evidence: "minor issue" }],
+      }),
+    });
+    const result = decideTier3Correction(ctx);
+    expect(result.disposition).toBe("abort");
+  });
+});
