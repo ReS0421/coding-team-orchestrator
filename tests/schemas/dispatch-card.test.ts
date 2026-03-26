@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateDispatchCard } from "../../src/schemas/dispatch-card.js";
+import { validateDispatchCard, safeValidateDispatchCard } from "../../src/schemas/dispatch-card.js";
 
 const validCard = {
   version: 1,
@@ -129,5 +129,29 @@ describe("DispatchCard - shared protocol fields", () => {
     expect(result.is_acting_lead).toBe(true);
     expect(result.is_shared_owner).toBe(true);
     expect(result.role).toBe("specialist");
+  });
+});
+
+// Sprint 5 dispatch-card fields
+describe("DispatchCard Sprint 5 fields", () => {
+  it("accepts active_span and specialist_assignments for execution_lead", () => {
+    const card = {
+      ...validCard,
+      role: "execution_lead",
+      tier: 3,
+      active_span: 3,
+      specialist_assignments: [
+        { specialist_id: "s1", task: "implement feature", shared_owner: false, priority: 1 },
+      ],
+    };
+    const result = validateDispatchCard(card);
+    expect(result.active_span).toBe(3);
+    expect(result.specialist_assignments).toHaveLength(1);
+  });
+
+  it("rejects active_span < 1", () => {
+    const card = { ...validCard, role: "execution_lead", tier: 3, active_span: 0 };
+    const result = safeValidateDispatchCard(card);
+    expect(result.success).toBe(false);
   });
 });

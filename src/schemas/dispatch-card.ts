@@ -39,6 +39,14 @@ export const DispatchCardSchema = z.object({
   spawn_order: z.number().int().optional(),   // owner=1, consumer=2
   is_acting_lead: z.boolean().optional(),     // specialist 겸임 acting lead
   is_shared_owner: z.boolean().optional(),    // Tier 2: specialist가 shared owner 겸임 (Tier 3은 role: "shared_owner")
+  // Sprint 5: Tier 3 lead card fields
+  active_span: z.number().int().min(1).optional(),  // rolling dispatch window size
+  specialist_assignments: z.array(z.object({
+    specialist_id: z.string().min(1),
+    task: z.string().min(1),
+    shared_owner: z.boolean().default(false),
+    priority: z.number().int().min(1).default(1),
+  })).optional(),  // execution contract assignments (inline to avoid circular import)
 });
 
 export type DispatchCard = z.infer<typeof DispatchCardSchema>;
