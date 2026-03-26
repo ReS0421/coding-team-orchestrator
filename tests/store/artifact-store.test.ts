@@ -161,4 +161,29 @@ describe("Brief thin wrapper", () => {
     expect(loaded.shared).toEqual([]);
     expect(loaded.escalate_if).toEqual([]);
   });
+
+  describe("CRLF normalization", () => {
+    it("parses CRLF frontmatter correctly", () => {
+      const raw = "---\r\ntitle: hello\r\n---\r\nbody text";
+      const result = parseFrontmatter(raw);
+      expect(result.frontmatter).toEqual({ title: "hello" });
+      expect(result.body).toBe("body text");
+      expect(result.raw).toBe(raw); // raw preserves original
+    });
+
+    it("strips \\r from body", () => {
+      const raw = "---\r\nk: v\r\n---\r\nline1\r\nline2";
+      const result = parseFrontmatter(raw);
+      expect(result.body).toBe("line1\nline2");
+      expect(result.body).not.toContain("\r");
+    });
+
+    it("handles mixed \\r\\n and \\n", () => {
+      const raw = "---\r\nk: v\n---\nsome body\r\nmore";
+      const result = parseFrontmatter(raw);
+      expect(result.frontmatter).toEqual({ k: "v" });
+      expect(result.body).toBe("some body\nmore");
+    });
+  });
+
 });

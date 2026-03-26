@@ -5,11 +5,13 @@ import type { ArtifactFile } from "./types.js";
 
 /**
  * Parse a file with YAML frontmatter (--- delimited) into ArtifactFile.
+ * Normalizes CRLF → LF before parsing. The `raw` field preserves the original input.
  */
 export function parseFrontmatter(raw: string): ArtifactFile {
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  const normalized = raw.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
-    return { frontmatter: {}, body: raw, raw };
+    return { frontmatter: {}, body: normalized, raw };
   }
   const frontmatter = (yaml.load(match[1]) as Record<string, unknown>) ?? {};
   const body = match[2];
