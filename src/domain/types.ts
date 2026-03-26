@@ -160,3 +160,30 @@ export const BlockedReason = {
   CONTEXT_MISSING: "context_missing",
 } as const;
 export type BlockedReason = (typeof BlockedReason)[keyof typeof BlockedReason];
+
+// ─── SharedOwnerState (Sprint 5: Tier 3 shared owner lifecycle) ─
+export const SharedOwnerState = {
+  ACTIVE: "active",
+  ADVISORY: "advisory",
+  TERMINATED: "terminated",
+} as const;
+export type SharedOwnerState = (typeof SharedOwnerState)[keyof typeof SharedOwnerState];
+
+// ─── RollingSlotState (Sprint 5: specialist slot state) ─────────
+export const RollingSlotState = {
+  IDLE: "idle",
+  RUNNING: "running",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const;
+export type RollingSlotState = (typeof RollingSlotState)[keyof typeof RollingSlotState];
+
+// ─── LeadPhase (Sprint 5: lead internal progress) ───────────────
+export const LeadPhase = {
+  CONTRACT: "contract",
+  SHARED_SPAWN: "shared_spawn",
+  ROLLING: "rolling",
+  MERGE: "merge",
+  SHUTDOWN: "shutdown",
+} as const;
+export type LeadPhase = (typeof LeadPhase)[keyof typeof LeadPhase];
