@@ -401,3 +401,112 @@ describe("runTier3 lead crash recovery", () => {
     expect(result.lead_crash_count).toBe(1);
   });
 });
+
+
+// ── Approval gate tests ──
+
+describe("runTier3 approval gates", () => {
+  it("rejects when provisional approval returns false", async () => {
+    const runner: RunnerFn = async (card: DispatchCard) => {
+      if (card.role === "planner") return makePlannerReturn();
+      if (card.role === "execution_lead") return makeLeadReturn();
+      return makePassReviewerReturn();
+    };
+
+    const config = makeConfig(runner, {
+      onProvisionalApproval: () => false,
+    });
+    const result = await runTier3(config, makeRequest());
+
+    expect(result.success).toBe(false);
+    expect(result.phase).toBe("planning");
+    expect(result.error).toContain("Provisional approval rejected");
+  });
+
+  it("rejects when execution approval returns false", async () => {
+    const runner: RunnerFn = async (card: DispatchCard) => {
+      if (card.role === "planner") return makePlannerReturn();
+      if (card.role === "execution_lead") {
+        return {
+          ...makeLeadReturn(),
+          execution_contract: {
+            contract_id: "test-contract",
+            brief_id: "test-brief",
+            specialist_assignments: [{ specialist_id: "s1", task: "impl", shared_owner: false, priority: 1 }],
+            shared_surfaces: [],
+            active_span: 3,
+          },
+        } satisfies LeadReturn;
+      }
+      return makePassReviewerReturn();
+    };
+
+    const config = makeConfig(runner, {
+      onExecutionApproval: (_contract) => false,
+    });
+    const result = await runTier3(config, makeRequest());
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Execution approval rejected");
+  });
+
+  it("proceeds when both approvals return true", async () => {
+    const runner: RunnerFn = async (card: DispatchCard) => {
+      if (card.role === "planner") return makePlannerReturn();
+      if (card.role === "execution_lead") {
+        return {
+          ...makeLeadReturn(),
+          execution_contract: {
+            contract_id: "test-contract",
+            brief_id: "test-brief",
+            specialist_assignments: [{ specialist_id: "s1", task: "impl", shared_owner: false, priority: 1 }],
+            shared_surfaces: [],
+            active_span: 3,
+          },
+        } satisfies LeadReturn;
+      }
+      return makePassReviewerReturn();
+    };
+
+    const config = makeConfig(runner, {
+      onProvisionalApproval: () => true,
+      onExecutionApproval: () => true,
+    });
+    const result = await runTier3(config, makeRequest());
+
+    expect(result.success).toBe(true);
+    expect(result.phase).toBe("done");
+  });
+
+  it("execution approval receives the contract object", async () => {
+    let receivedContract: unknown = null;
+    const runner: RunnerFn = async (card: DispatchCard) => {
+      if (card.role === "planner") return makePlannerReturn();
+      if (card.role === "execution_lead") {
+        return {
+          ...makeLeadReturn(),
+          execution_contract: {
+            contract_id: "my-contract",
+            brief_id: "my-brief",
+            specialist_assignments: [{ specialist_id: "s1", task: "impl", shared_owner: false, priority: 1 }],
+            shared_surfaces: ["shared.ts"],
+            active_span: 2,
+          },
+        } satisfies LeadReturn;
+      }
+      return makePassReviewerReturn();
+    };
+
+    const config = makeConfig(runner, {
+      onExecutionApproval: (contract) => {
+        receivedContract = contract;
+        return true;
+      },
+    });
+    await runTier3(config, makeRequest());
+
+    expect(receivedContract).toBeDefined();
+    expect((receivedContract as any).contract_id).toBe("my-contract");
+    expect((receivedContract as any).shared_surfaces).toEqual(["shared.ts"]);
+  });
+});

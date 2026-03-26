@@ -931,6 +931,10 @@ import { SharedOwnerState } from "../domain/types.js";
 export interface Tier3Config extends Tier2Config {
   maxLeadRetries?: number; // default 1
   onIntegrationTest?: () => boolean; // default: returns true
+  /** Phase 1 gate: provisional approval after planner completes. Default: () => true */
+  onProvisionalApproval?: () => boolean;
+  /** Phase 1→2 gate: execution approval after lead returns execution contract. Default: () => true */
+  onExecutionApproval?: (contract: import("../schemas/execution-contract.js").ExecutionContract) => boolean;
 }
 
 export interface Tier3Result {
@@ -1026,6 +1030,20 @@ export async function runTier3(
     }
   }
 
+  // ── Provisional approval gate (1단계: 방향성 OK) ──
+  const provisionalApproval = config.onProvisionalApproval ?? (() => true);
+  if (!provisionalApproval()) {
+    return {
+      success: false,
+      tier: 3,
+      phase: "planning",
+      correction_count: 0,
+      error: "Provisional approval rejected",
+      lead_crash_count: 0,
+      integration_retry_count: 0,
+    };
+  }
+
   // ── Build lead dispatch card ──
   const uid = `lead-${Date.now()}`;
   const leadCard: DispatchCard = {
@@ -1115,6 +1133,14 @@ export async function runTier3(
       leadResult = validation.data;
       executionContract = leadResult.execution_contract;
 
+      // ── Execution approval gate (2단계: 실행 확정) ──
+      if (executionContract) {
+        const executionApproval = config.onExecutionApproval ?? (() => true);
+        if (!executionApproval(executionContract)) {
+          return { success: false, error: "Execution approval rejected" };
+        }
+      }
+
       // Apply manifest updates from lead
       if (leadResult.manifest_updates) {
         const fullResult = applyPatchSetFull(manifest, leadResult.manifest_updates);
@@ -1157,9 +1183,9 @@ export async function runTier3(
       break;
     }
 
-    // Lead crashed or malformed
-    // If malformed return (not a crash), return error immediately
-    if (result.error === "Lead returned malformed data") {
+    // Lead crashed or malformed or approval rejected
+    // If malformed or approval rejected (not a crash), return error immediately
+    if (result.error === "Lead returned malformed data" || result.error === "Execution approval rejected") {
       return {
         success: false,
         tier: 3,
