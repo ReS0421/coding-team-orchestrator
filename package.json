@@ -1,20 +1,33 @@
 {
-  "name": "coding-team-orchestrator",
-  "version": "0.1.0",
+  "name": "team-orchestrator",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit",
-    "test": "vitest run"
+    "build": "tsc",
+    "check": "tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@types/js-yaml": "^4.0.9",
     "js-yaml": "^4.1.1",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "~5.4.0",
-    "vitest": "^1.4.0"
+    "vitest": "^1.4.0",
+    "@types/js-yaml": "^4.0.9"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ]
 }
