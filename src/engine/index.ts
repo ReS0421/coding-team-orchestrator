@@ -10,3 +10,4 @@ export * from "./rolling-dispatch.js";
 export * from "./shared-owner-lifecycle.js";
 export * from "./heartbeat.js";
 export * from "./dual-reviewer.js";
+export * from "./lead-recovery.js";
