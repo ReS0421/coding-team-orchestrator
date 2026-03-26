@@ -1,5 +1,5 @@
 {
-  "name": "team-orchestrator",
+  "name": "coding-team-orchestrator",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -15,5 +15,6 @@
     "@types/node": "^22.0.0",
     "typescript": "~5.4.0",
     "vitest": "^1.4.0"
-  }
+  },
+  "license": "MIT"
 }
