@@ -132,9 +132,15 @@ export function createFakeLeadRunner(options: FakeLeadRunnerOptions): FakeLeadRu
       manifest_updates: {
         base_manifest_seq: manifest.manifest_seq,
         apply_mode: "all_or_fail",
-        patches: [],
+        patches: [{
+          artifact_id: "lead-execution",
+          op: "set",
+          field: "lifecycle",
+          new_value: "approved",
+          reason: "lead execution complete",
+        }],
       },
-      shared_owner_states: sharedOwnerStates,
+      shared_owner_states: Object.keys(sharedOwnerStates).length > 0 ? sharedOwnerStates : undefined,
     };
 
     return leadReturn;
