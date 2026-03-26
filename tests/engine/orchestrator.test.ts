@@ -143,7 +143,7 @@ describe("runTier1", () => {
       }),
     );
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Tier 2/3 not supported yet");
+    expect(result.error).toBe("Tier 2+ not handled by runTier1");
   });
 
   it("event log written on success", async () => {

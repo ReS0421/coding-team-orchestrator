@@ -73,7 +73,7 @@ export async function runTier1(
       tier,
       dispatch_card: dummyCard,
       retry_count: 0,
-      error: "Tier 2/3 not supported yet",
+      error: "Tier 2+ not handled by runTier1",
     };
   }
 

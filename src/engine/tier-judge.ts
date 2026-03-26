@@ -19,7 +19,7 @@ export interface TierJudgeInput {
  * 설계 §Tier 판정:
  * - Tier 1: no shared, specialist ≤ 1, write_scope ≤ 5
  * - Tier 2: shared ≤ 2 (모두 owner 지정 + controllable), specialist ≤ 3
- * - Tier 3: shared > 2 or uncontrollable or specialist > 3 → 미지원 에러
+ * - Tier 3: shared > 2 or uncontrollable or specialist > 3 → Tier 3 판정 시 반환
  *
  * 2차 기준 (보조): write_scope 20+ → Tier 3 가드
  */
