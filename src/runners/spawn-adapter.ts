@@ -1,12 +1,42 @@
 import type { DispatchCard } from "../schemas/dispatch-card.js";
 import type { SpecialistSubmission } from "../schemas/specialist-submission.js";
 import type { BlockedOn } from "../schemas/specialist-submission.js";
-import type { RunnerFn, ParallelResult, SettledResult } from "./types.js";
+import type { RunnerFn, RunnerReturn, ParallelResult, SettledResult } from "./types.js";
 import { resolveError } from "../engine/error-resolution.js";
+import { buildTaskTemplate, type TaskTemplateConfig } from "./task-template.js";
+
+
+export interface SpawnOptions {
+  mode: "run";
+  runtime: "subagent" | "acp";
+  model?: string;
+  runTimeoutSeconds?: number;
+  cwd?: string;
+}
+
+export interface SpawnResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+}
+
+export interface RealSpawnConfig {
+  /** sessions_spawn 호출 함수 (DI) */
+  spawn: (task: string, options: SpawnOptions) => Promise<SpawnResult>;
+  /** 프로젝트 경로 */
+  projectPath: string;
+  /** 설계 문서 경로 (읽기 전용) */
+  designDocPaths?: string[];
+  /** timeout profile → seconds 매핑 */
+  timeoutMap?: Record<string, number>;
+  /** 기본 retry 횟수 (default 1) */
+  defaultRetries?: number;
+}
 
 export interface SpawnAdapterConfig {
   mode: "fake" | "real";
   fakeRunner?: RunnerFn;
+  realConfig?: RealSpawnConfig;
 }
 
 /**
@@ -14,9 +44,65 @@ export interface SpawnAdapterConfig {
  * In fake mode, delegates to the provided fakeRunner.
  * Real mode is a stub for Sprint 6.
  */
+/** planner/reviewer → subagent, specialist/lead/shared_owner → acp */
+export function resolveRuntime(card: DispatchCard): "subagent" | "acp" {
+  if (card.role === "planner" || card.role === "reviewer") return "subagent";
+  return "acp";
+}
+
+/** TimeoutProfile → seconds */
+export function resolveTimeout(card: DispatchCard, map?: Record<string, number>): number {
+  const defaults: Record<string, number> = {
+    quick: 120, standard: 600, extended: 1800, unlimited: 0,
+  };
+  return { ...defaults, ...map }[card.timeout_profile.class] ?? 600;
+}
+
 export function createSpawnAdapter(config: SpawnAdapterConfig): RunnerFn {
   if (config.mode === "real") {
-    throw new Error("Real spawn not implemented yet — Sprint 6");
+    if (!config.realConfig) {
+      throw new Error("realConfig is required when mode is 'real'");
+    }
+
+    const { spawn, projectPath, designDocPaths, timeoutMap, defaultRetries } = config.realConfig;
+    const templateConfig: TaskTemplateConfig = { projectPath, designDocPaths };
+
+    return async (card: DispatchCard): Promise<RunnerReturn> => {
+      const task = buildTaskTemplate(card, templateConfig);
+      const runtime = resolveRuntime(card);
+      const timeout = resolveTimeout(card, timeoutMap);
+
+      let lastError: Error | undefined;
+      const maxRetries = defaultRetries ?? 1;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const result = await spawn(task, {
+          mode: "run",
+          runtime,
+          runTimeoutSeconds: timeout,
+          cwd: projectPath,
+        });
+
+        if (result.success && result.output) {
+          // parseSpawnOutput is imported from output-parser (Task 6.7)
+          // For now, JSON.parse + basic validation; full parser in next task
+          try {
+            return JSON.parse(result.output) as RunnerReturn;
+          } catch {
+            lastError = new Error("Failed to parse spawn output as JSON");
+            if (attempt < maxRetries) continue;
+            break;
+          }
+        }
+
+        lastError = new Error(result.error ?? "Spawn failed");
+
+        // Validation errors are not retryable
+        if (result.error?.includes("validation")) break;
+      }
+
+      throw lastError ?? new Error("Spawn failed after retries");
+    };
   }
 
   if (!config.fakeRunner) {
