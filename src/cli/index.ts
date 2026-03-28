@@ -1,4 +1,5 @@
 import { runJudge } from "./commands/judge.js";
+import { runValidate } from "./commands/validate.js";
 
 interface CliResult {
   success: boolean;
@@ -25,6 +26,19 @@ export function main(args: string[]): CliResult {
       try {
         const input = JSON.parse(jsonInput);
         const result = runJudge(input);
+        return { success: true, data: result };
+      } catch (e) {
+        return { success: false, error: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}` };
+      }
+    }
+    case "validate": {
+      const jsonInput = args[1];
+      if (!jsonInput) {
+        return { success: false, error: "validate requires JSON input as second argument" };
+      }
+      try {
+        const input = JSON.parse(jsonInput);
+        const result = runValidate(input);
         return { success: true, data: result };
       } catch (e) {
         return { success: false, error: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}` };
