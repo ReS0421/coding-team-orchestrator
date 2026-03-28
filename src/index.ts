@@ -64,3 +64,6 @@ export { parseFrontmatter, serializeFrontmatter, readArtifact, writeArtifact, ar
 export { createEmptyManifest, loadManifest, saveManifest, findArtifact, addArtifact } from "./store/manifest.js";
 export { createCheckpoint, restoreFromCheckpoint, findCheckpointByPhase, type PhaseLabel } from "./store/checkpoint.js";
 export type { ProjectManifest, ManifestArtifact, ArtifactFile } from "./store/types.js";
+
+// CLI
+export { main as cliMain } from "./cli/index.js";

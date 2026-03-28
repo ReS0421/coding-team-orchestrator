@@ -29,5 +29,8 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "bin": {
+    "team-orchestrator": "./dist/cli/bin.js"
+  }
 }
