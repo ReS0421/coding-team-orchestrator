@@ -1,20 +1,14 @@
 # team-orchestrator
 
-A TypeScript-based coding team orchestration engine + SKILL.md protocol that coordinates AI sub-agents to execute software development tasks through structured dispatch, two-stage review, and correction loops.
+A coding team orchestration system for [OpenClaw](https://github.com/openclaw/openclaw), combining SKILL.md prompt protocols with a TypeScript reference library. Coordinates AI sub-agents through structured dispatch, two-stage review, and correction loops.
 
-## Two Layers
+## How It Works
 
-### 1. SKILL.md Protocol (Primary — Sprint 7+)
-
-The orchestration workflow runs entirely through SKILL.md prompt protocols, inspired by [Superpowers](https://github.com/obra/superpowers):
-
-- **`team-orchestrator/SKILL.md`** — Orchestrator behavior protocol (sequential execution, two-stage review, correction rules)
-- **`team-planner/SKILL.md`** — Plan authoring protocol (Superpowers writing-plans pattern)
-- **Prompt templates** — implementer, spec-reviewer, quality-reviewer, final-reviewer
+The orchestration runs as **OpenClaw skills** — SKILL.md files that define behavior protocols for openclaw and its subagents.
 
 ```
 openclaw (depth 0)
-  → plan authoring (team-planner)
+  → plan authoring (skills/team-planner/)
   → sessions_spawn(orchestrator, depth 1)
     → implementer (depth 2, leaf) — per task
     → spec-reviewer (depth 2, leaf) — spec compliance
@@ -24,87 +18,68 @@ openclaw (depth 0)
 
 **Flat depth 2. Sequential execution. No parallel implementation spawns.**
 
-### 2. TypeScript Library (Reference Asset — Sprint 1~6)
+### OpenClaw Skills
 
-The TS library (636 tests, ~5,500 LOC) serves as the formal specification for orchestration logic. It validates tier judgment, correction budgets, error resolution, shared protocols, and more through comprehensive tests.
-
-## Package
-
-- **npm name:** `team-orchestrator`
-- **Version:** `0.7.0`
-- **Entry point:** `src/index.ts` → `dist/index.js`
-- **License:** MIT
-
-## Architecture
-
-### Tier Routing
-
-| Tier | Description | Execution |
+| Skill | Location | Used By |
 |---|---|---|
-| Tier 1 | Single specialist, no shared files, write scope ≤ 5 | openclaw direct (no orchestrator) |
-| Tier 2 | 2-3 specialists, shared files possible | Orchestrator → sequential impl + review |
+| `team-planner` | `~/.openclaw/workspace/skills/team-planner/` | openclaw (directly) — plan authoring |
+| `team-orchestrator` | `~/.openclaw/workspace/skills/team-orchestrator/` | orchestrator subagent — plan execution |
+
+The orchestrator skill includes 4 prompt templates:
+- `implementer-prompt.md` — Task implementation (TDD, self-review, structured report)
+- `spec-reviewer-prompt.md` — Spec compliance verification ("Do Not Trust the Report")
+- `quality-reviewer-prompt.md` — Code quality review (severity-based)
+- `final-reviewer-prompt.md` — Integration review (cross-task consistency)
+
+Design inspired by [Superpowers](https://github.com/obra/superpowers) (writing-plans + subagent-driven-development patterns).
+
+### OpenClaw Configuration
+
+```json5
+{
+  agents: {
+    defaults: {
+      subagents: {
+        maxSpawnDepth: 2,
+        maxChildrenPerAgent: 5
+      }
+    }
+  }
+}
+```
+
+## Tier Routing
+
+| Tier | Condition | Execution |
+|---|---|---|
+| Tier 1 | 1 specialist, no shared files, write scope ≤ 5 | openclaw direct (no orchestrator) |
+| Tier 2 | 2-3 specialists | Orchestrator → sequential impl + review |
 | Tier 3 | 4+ specialists or architecture changes | Orchestrator → sequential impl + dual review |
 
-### Two-Stage Review (per task)
+Tier is determined by openclaw during plan authoring (team-planner skill). The orchestrator follows the Plan header's Tier without re-judgment.
 
-1. **Spec Review** — Does the code match the specification? ("Do Not Trust the Report")
-2. **Quality Review** — Is the code production-ready? (only after spec PASS)
+## Two-Stage Review (per task)
+
+1. **Spec Review** — Does the code match the specification? (code inspection, not report trust)
+2. **Quality Review** — Is the code production-ready? (only proceeds after spec PASS)
+
+### Structured Report Formats
+
+All subagents return structured reports (`## REPORT`, `## SPEC_REVIEW`, `## QUALITY_REVIEW`, `## FINAL_REVIEW`). Missing headers → orchestrator re-requests (max 2, then BLOCKED).
 
 ### Correction Rules
 
 - Max 2 correction rounds per task
 - Spec FAIL → implementer fix → spec re-review
 - Quality FAIL (CRITICAL) → implementer fix → quality re-review
-- Exceeded → BLOCKED, dependent tasks skipped
-- Report format violations → max 2 re-requests
+- Exceeded → BLOCKED; dependent tasks skipped, independent tasks continue
+- VERDICT: PASS or FAIL only (no CONDITIONAL)
 
-## Tech Stack
+## TypeScript Reference Library
 
-- **Runtime:** Node.js v18+ (ESM)
-- **Language:** TypeScript 5.4
-- **Validation:** Zod
-- **Testing:** Vitest
+The TS library (651 tests, ~5,500 LOC) serves as the **formal specification** for orchestration logic — tier judgment, correction budgets, error resolution, shared protocols, dispatch rules. It validates the design through comprehensive tests, and its functions are exposed via CLI for optional programmatic use.
 
-## Project Structure
-
-```
-src/
-├── cli/          # CLI wrapper (judge, validate, dispatch commands)
-│   ├── index.ts              # CLI entry point (main function)
-│   ├── bin.ts                # #!/usr/bin/env node entry
-│   └── commands/
-│       ├── judge.ts          # Tier judgment
-│       ├── validate.ts       # Zod schema validation
-│       └── dispatch.ts       # Dispatch card generation
-├── engine/       # Core orchestration logic
-│   ├── orchestrator-tier1.ts # Tier 1 orchestrator (runTier1)
-│   ├── orchestrator-tier2.ts # Tier 2 orchestrator (runTier2)
-│   ├── orchestrator-tier3.ts # Tier 3 orchestrator (runTier3)
-│   ├── tier-judge.ts         # Tier routing decision
-│   ├── dispatch-rule.ts      # Dispatch rule evaluation
-│   ├── correction.ts         # Correction / re-review decision
-│   ├── error-resolution.ts   # Error strategy (retry/escalate/abort)
-│   ├── dual-reviewer.ts      # Dual-reviewer merge logic
-│   ├── rolling-dispatch.ts   # Rolling slot dispatch
-│   ├── acting-lead.ts        # Acting lead lifecycle
-│   ├── lead-recovery.ts      # Lead crash recovery
-│   ├── heartbeat.ts          # Heartbeat / health monitor
-│   ├── shared-owner-lifecycle.ts  # Shared owner state machine
-│   ├── shared-protocol.ts    # Shared owner protocol helpers
-│   └── patch-builder.ts      # Manifest patch construction
-├── runners/      # Runner abstraction for sub-agent execution
-│   ├── spawn-adapter.ts      # Real + fake spawn adapter
-│   ├── output-parser.ts      # Raw output → typed return
-│   ├── task-template.ts      # DispatchCard → task string
-│   └── types.ts
-├── schemas/      # Zod schemas for inter-agent contracts
-├── store/        # Manifest, patch engine, checkpoint, artifacts
-├── domain/       # Shared domain types
-└── index.ts      # Public API surface
-tests/            # 68 test files, 651 tests
-```
-
-## CLI
+### CLI
 
 ```bash
 # Tier judgment
@@ -117,51 +92,63 @@ npx team-orchestrator validate '{"schema":"reviewer_return","data":{...}}'
 npx team-orchestrator dispatch '{"task":"...","write_scope":[...],"brief":{...}}'
 ```
 
+### Project Structure
+
+```
+src/
+├── cli/          # CLI wrapper (judge, validate, dispatch)
+├── engine/       # Core orchestration logic (tier-judge, correction, dispatch-rule, etc.)
+├── runners/      # Spawn adapter (real + fake), output parser, task template
+├── schemas/      # Zod schemas for inter-agent contracts
+├── store/        # Manifest, patch engine, checkpoint, artifacts
+├── domain/       # Shared domain types
+└── index.ts      # Public API surface
+tests/            # 68 test files, 651 tests
+```
+
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js v18+
-- npm
+- [OpenClaw](https://github.com/openclaw/openclaw) installed and configured
+- Node.js v18+ (for TS library / CLI)
 
-### Installation
+### Install Skills
+
+The skills are located in the OpenClaw workspace:
+
+```
+~/.openclaw/workspace/skills/
+├── team-planner/
+│   └── SKILL.md          # Plan authoring protocol
+└── team-orchestrator/
+    ├── SKILL.md           # Orchestrator behavior protocol
+    ├── implementer-prompt.md
+    ├── spec-reviewer-prompt.md
+    ├── quality-reviewer-prompt.md
+    └── final-reviewer-prompt.md
+```
+
+### Install TS Library (optional)
 
 ```bash
 git clone https://github.com/ReS0421/coding-team-orchestrator.git
 cd coding-team-orchestrator
 npm install
-```
-
-### Run Tests
-
-```bash
-npm test
-# 68 test files, 651 tests
-```
-
-### Type Check
-
-```bash
-npm run check
-```
-
-### Build
-
-```bash
-npm run build    # tsc → dist/
+npm test    # 68 test files, 651 tests
 ```
 
 ## Sprint History
 
 | Sprint | Scope | Tests |
 |---|---|---|
-| 1 | Domain types, Zod schemas, tier-judge, dispatch-rule, error-resolution, fake runner | ~150 |
+| 1 | Domain types, Zod schemas, tier-judge, dispatch-rule, error-resolution | ~150 |
 | 2 | runTier1, runTier2, correction loop, runParallel, artifact store | ~315 |
 | 3 | Shared owner lifecycle, rolling dispatch, acting lead, runTier3, dual reviewer | ~450 |
 | 4 | Heartbeat, lead recovery, shared protocol, event/error log schemas | ~530 |
 | 5 | ExecutionContract, domain extensions, freshness, versioning, log-writer | ~595 |
 | 6 | Real spawn adapter, output parser, task template, npm build, SKILL.md wrapper | **636** |
-| 7 | **Architecture transition**: SKILL.md-Only Orchestration (Superpowers pattern), CLI wrapper, TS lib → reference asset | **651** |
+| 7 | **Architecture transition**: SKILL.md-Only (Superpowers pattern), OpenClaw skills, CLI wrapper, TS lib → reference asset | **651** |
 
 ## License
 
