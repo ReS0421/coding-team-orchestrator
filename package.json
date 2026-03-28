@@ -32,5 +32,6 @@
   ],
   "bin": {
     "team-orchestrator": "./dist/cli/bin.js"
-  }
+  },
+  "private": true
 }
